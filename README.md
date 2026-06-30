@@ -6,7 +6,7 @@ transaction** (rules + a lightweight ML fallback), **detects recurring
 subscriptions**, **flags spending anomalies**, and emails a **weekly digest** —
 all behind multi-user authentication.
 
-> A full-stack portfolio project spanning data engineering, applied ML, layered
+> A full-stack project spanning data engineering, applied ML, layered
 > backend architecture, background automation, and a real analytics dashboard.
 
 ---
