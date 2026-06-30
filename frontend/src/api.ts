@@ -42,6 +42,28 @@ export interface MonthlyTrend {
   total_income: number
 }
 
+export interface Subscription {
+  id: number
+  merchant: string
+  cadence: string
+  average_amount: number
+  occurrences: number
+  last_seen: string
+  next_expected: string | null
+}
+
+export interface Anomaly {
+  id: number
+  transaction_id: number
+  reason_code: string
+  detail: string | null
+  detected_at: string
+  txn_date: string
+  merchant: string
+  amount: number
+  category: string
+}
+
 export interface IngestionResult {
   account_id: number
   rows_received: number
@@ -70,6 +92,48 @@ export interface SchemaPreview {
   sample_rows: PreviewRow[]
 }
 
+// --- Cookie auth + authenticated fetch with silent refresh ------------------
+//
+// Tokens live in httpOnly cookies the browser sends automatically, so this
+// client never reads or stores them. On a 401 we transparently try a single
+// refresh and replay the request; if that fails, we hand off to the app to
+// show the login screen.
+
+export interface User {
+  id: number
+  email: string
+  created_at: string
+}
+
+let onUnauthorized: () => void = () => {}
+export function setUnauthorizedHandler(fn: () => void) {
+  onUnauthorized = fn
+}
+
+async function tryRefresh(): Promise<boolean> {
+  const res = await fetch('/api/auth/refresh', {
+    method: 'POST',
+    credentials: 'include',
+  })
+  return res.ok
+}
+
+async function authedFetch(
+  url: string,
+  options: RequestInit = {},
+  retry = true,
+): Promise<Response> {
+  const res = await fetch(url, { ...options, credentials: 'include' })
+  if (res.status === 401) {
+    if (retry && (await tryRefresh())) {
+      return authedFetch(url, options, false)
+    }
+    onUnauthorized()
+    throw new Error('Your session has expired — please log in again.')
+  }
+  return res
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}))
@@ -79,10 +143,35 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  listAccounts: () => fetch('/api/accounts').then(json<Account[]>),
+  // Bootstrap check: returns the user if a valid session cookie exists.
+  me: () => authedFetch('/api/auth/me').then(json<User>),
+
+  register: (email: string, password: string) =>
+    fetch('/api/auth/register', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    }).then(json<User>),
+
+  login: (email: string, password: string) => {
+    // The login endpoint uses the OAuth2 password form (username = email).
+    const body = new URLSearchParams({ username: email, password })
+    return fetch('/api/auth/login', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    }).then(json<User>)
+  },
+
+  logout: () =>
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }),
+
+  listAccounts: () => authedFetch('/api/accounts').then(json<Account[]>),
 
   createAccount: (name: string, institution: string) =>
-    fetch('/api/accounts', {
+    authedFetch('/api/accounts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, institution }),
@@ -91,7 +180,7 @@ export const api = {
   previewStatement: (file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return fetch('/api/statements/preview', {
+    return authedFetch('/api/statements/preview', {
       method: 'POST',
       body: form,
     }).then(json<SchemaPreview>)
@@ -100,37 +189,63 @@ export const api = {
   uploadStatement: (accountId: number, file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return fetch(`/api/accounts/${accountId}/statements`, {
+    return authedFetch(`/api/accounts/${accountId}/statements`, {
       method: 'POST',
       body: form,
     }).then(json<IngestionResult>)
   },
 
   summary: (accountId: number) =>
-    fetch(`/api/accounts/${accountId}/analytics/summary`).then(json<SummaryStats>),
+    authedFetch(`/api/accounts/${accountId}/analytics/summary`).then(json<SummaryStats>),
 
   byCategory: (accountId: number) =>
-    fetch(`/api/accounts/${accountId}/analytics/by-category`).then(
+    authedFetch(`/api/accounts/${accountId}/analytics/by-category`).then(
       json<CategorySpend[]>,
     ),
 
   trends: (accountId: number) =>
-    fetch(`/api/accounts/${accountId}/analytics/trends`).then(json<MonthlyTrend[]>),
+    authedFetch(`/api/accounts/${accountId}/analytics/trends`).then(json<MonthlyTrend[]>),
+
+  subscriptions: (accountId: number) =>
+    authedFetch(`/api/accounts/${accountId}/subscriptions`).then(json<Subscription[]>),
+
+  anomalies: (accountId: number) =>
+    authedFetch(`/api/accounts/${accountId}/anomalies`).then(json<Anomaly[]>),
+
+  digestPreview: (accountId: number) =>
+    authedFetch(`/api/accounts/${accountId}/digest/preview`).then(
+      json<{ account_id: number; subject: string; body: string }>,
+    ),
+
+  sendDigest: (accountId: number) =>
+    authedFetch(`/api/accounts/${accountId}/digest/send`, { method: 'POST' }).then(
+      json<{ account_id: number; subject: string; delivery: string }>,
+    ),
+
+  schedulerStatus: () =>
+    authedFetch('/api/automation/status').then(
+      json<{
+        running: boolean
+        cadence: string
+        next_run: string | null
+        delivery_mode: string
+      }>,
+    ),
 
   transactions: (accountId: number) =>
-    fetch(`/api/accounts/${accountId}/transactions?limit=200`).then(
+    authedFetch(`/api/accounts/${accountId}/transactions?limit=200`).then(
       json<Transaction[]>,
     ),
 
   correctCategory: (txnId: number, category: string) =>
-    fetch(`/api/transactions/${txnId}/category`, {
+    authedFetch(`/api/transactions/${txnId}/category`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ category }),
     }).then(json<Transaction>),
 
   clearData: (accountId: number) =>
-    fetch(`/api/accounts/${accountId}/transactions`, { method: 'DELETE' }).then(
+    authedFetch(`/api/accounts/${accountId}/transactions`, { method: 'DELETE' }).then(
       json<{ account_id: number; deleted: number }>,
     ),
 }

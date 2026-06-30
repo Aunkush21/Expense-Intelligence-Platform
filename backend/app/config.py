@@ -13,9 +13,43 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
+    # --- Weekly digest / email ---
+    # If SMTP isn't configured, digests are written to digest_outbox/ instead of
+    # being emailed, so the feature is fully demoable without credentials.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    digest_from: str = "digest@expense-intelligence.local"
+    digest_to: str = ""  # falls back to digest_from when empty
+    digest_outbox: str = "./digest_outbox"
+    # Scheduler cadence. By default the digest runs weekly (Monday 08:00). Set a
+    # positive value to run every N minutes instead — handy for a live demo.
+    digest_interval_minutes: int = 0
+
+    # --- Auth (JWT + refresh cookies) ---
+    # Override jwt_secret_key in production (e.g. `openssl rand -hex 32`).
+    jwt_secret_key: str = "dev-insecure-change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    # Short-lived access token; a refresh token (httpOnly cookie) mints new ones.
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
+    # Cookie attributes. Set cookie_secure=true behind HTTPS in production; use
+    # samesite="none" (with secure) only if the API is on a different site.
+    cookie_secure: bool = False
+    cookie_samesite: str = "lax"
+
+    @property
+    def using_default_secret(self) -> bool:
+        return self.jwt_secret_key == "dev-insecure-change-me-in-production"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_password)
 
 
 @lru_cache

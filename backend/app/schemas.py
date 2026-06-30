@@ -3,7 +3,25 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: EmailStr
+    created_at: datetime
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 
 class AccountCreate(BaseModel):
@@ -66,6 +84,25 @@ class ClearResult(BaseModel):
     deleted: int
 
 
+class DigestPreview(BaseModel):
+    account_id: int
+    subject: str
+    body: str
+
+
+class DigestSendResult(BaseModel):
+    account_id: int
+    subject: str
+    delivery: str  # e.g. "written to digest_outbox/0001_...txt" or "emailed to ..."
+
+
+class SchedulerStatus(BaseModel):
+    running: bool
+    cadence: str
+    next_run: str | None
+    delivery_mode: str  # "email (SMTP)" or "file (digest_outbox/)"
+
+
 class PreviewRow(BaseModel):
     txn_date: date
     merchant: str
@@ -122,10 +159,14 @@ class SubscriptionOut(BaseModel):
 
 
 class AnomalyOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """Anomaly enriched with its transaction's display fields for the dashboard."""
 
     id: int
     transaction_id: int
     reason_code: str
     detail: str | None
     detected_at: datetime
+    txn_date: date
+    merchant: str
+    amount: float
+    category: str

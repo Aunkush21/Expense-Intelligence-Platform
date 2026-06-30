@@ -13,13 +13,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Account, Transaction
 from app.schemas import CategorySpend, MonthlyTrend, SummaryStats
+from app.security import get_owned_account
 
 router = APIRouter(prefix="/api", tags=["analytics"])
 
@@ -29,18 +30,15 @@ _SPEND_ONLY = case((Transaction.amount < 0, _SPEND), else_=0.0)
 _INCOME_ONLY = case((Transaction.amount > 0, Transaction.amount), else_=0.0)
 
 
-def _require_account(db: Session, account_id: int) -> None:
-    if db.get(Account, account_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
-
-
 def _for_account(stmt: Select, account_id: int) -> Select:
     return stmt.where(Transaction.account_id == account_id)
 
 
 @router.get("/accounts/{account_id}/analytics/summary", response_model=SummaryStats)
-def summary(account_id: int, db: Session = Depends(get_db)) -> SummaryStats:
-    _require_account(db, account_id)
+def summary(
+    account: Account = Depends(get_owned_account), db: Session = Depends(get_db)
+) -> SummaryStats:
+    account_id = account.id
 
     spend, income, count, start, end = db.execute(
         _for_account(
@@ -80,8 +78,10 @@ def summary(account_id: int, db: Session = Depends(get_db)) -> SummaryStats:
     "/accounts/{account_id}/analytics/by-category",
     response_model=list[CategorySpend],
 )
-def by_category(account_id: int, db: Session = Depends(get_db)) -> list[CategorySpend]:
-    _require_account(db, account_id)
+def by_category(
+    account: Account = Depends(get_owned_account), db: Session = Depends(get_db)
+) -> list[CategorySpend]:
+    account_id = account.id
 
     rows = db.execute(
         _for_account(
@@ -107,8 +107,10 @@ def by_category(account_id: int, db: Session = Depends(get_db)) -> list[Category
     "/accounts/{account_id}/analytics/trends",
     response_model=list[MonthlyTrend],
 )
-def monthly_trends(account_id: int, db: Session = Depends(get_db)) -> list[MonthlyTrend]:
-    _require_account(db, account_id)
+def monthly_trends(
+    account: Account = Depends(get_owned_account), db: Session = Depends(get_db)
+) -> list[MonthlyTrend]:
+    account_id = account.id
 
     # Month bucketing is the one DB-specific operation (strftime vs to_char), so
     # we fetch just the two needed columns — not whole ORM rows — and bucket in

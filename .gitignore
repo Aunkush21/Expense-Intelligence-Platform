@@ -1,41 +1,52 @@
-# Python
+# ─────────────────────────── Secrets & env ───────────────────────────
+.env
+*.env
+!.env.example
+
+# ─────────────────────────── Python (backend) ────────────────────────
 __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
 venv/
 env/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
-# Env / secrets
-.env
-*.env
-!.env.example
-
-# Databases
+# ─────────────────────────── Databases ───────────────────────────────
 *.db
 *.sqlite
 *.sqlite3
 
-# Uploads
+# ─────────────────── Runtime-generated artifacts ─────────────────────
 backend/uploads/
+backend/digest_outbox/
 
-# Node / frontend
+# ─────────────────────── Node / frontend build ──────────────────────
 node_modules/
 dist/
+dist-ssr/
 build/
 .vite/
+*.local
 
-# OS / editor
-.DS_Store
-Thumbs.db
+# ───────────────── Large / non-essential sample data ────────────────
+# Kaggle fraud-detection dataset (144 MB, not a usable statement export)
+backend/sample_data/creditcard.csv
+
+# ─────────────────────────── Tooling / IDE ──────────────────────────
+.claude/
 .idea/
 .vscode/
+*.swp
 
-# Test / coverage
-.pytest_cache/
-.coverage
-htmlcov/
+# ─────────────────────────── OS cruft ───────────────────────────────
+.DS_Store
+Thumbs.db
 
-backend/sample_data/creditcard.csv
-.claude/
+# ─────────────────────── Project source docs ────────────────────────
+# The original proposal PDF stays out of the repo
 *.pdf

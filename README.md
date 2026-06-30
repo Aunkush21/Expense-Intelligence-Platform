@@ -1,132 +1,167 @@
 # Personal Finance Intelligence & Automation Platform
 
-Turns raw bank / credit-card statement exports into something you can act on:
-it ingests a CSV statement, automatically **categorizes** every transaction
-(rules + a lightweight ML fallback), and surfaces **spending analytics** through
-a real dashboard. Recurring-subscription detection, anomaly flagging, and a
-scheduled email digest are the Week-2 roadmap below.
+Turn raw bank / credit-card statement exports into something you can act on. Upload
+a CSV and the platform **auto-detects the file's columns**, **categorizes every
+transaction** (rules + a lightweight ML fallback), **detects recurring
+subscriptions**, **flags spending anomalies**, and emails a **weekly digest** —
+all behind multi-user authentication.
 
-> Built as a focused portfolio project spanning data engineering, applied ML,
-> backend architecture, and full-stack delivery.
+> A full-stack portfolio project spanning data engineering, applied ML, layered
+> backend architecture, background automation, and a real analytics dashboard.
+
+---
+
+## Features
+
+- **Smart ingestion** — upload *any* bank/credit CSV. A schema-inference engine
+  reads the headers **and the cell contents** to map each column to the canonical
+  `date / merchant / amount` model, including separate debit/credit or a
+  direction column (e.g. ANZ's `movement`). Non-statement files (e.g. an ML
+  feature dataset) are rejected with a clear explanation. Re-uploads are deduped.
+- **Categorization** — a two-tier engine: deterministic keyword rules first, then
+  a Naive Bayes classifier trained on your history. **Correcting a category in the
+  UI retrains the model** (human-in-the-loop).
+- **Recurring-subscription detection** — finds merchants billing on a regular
+  cadence for a stable amount, and predicts the next charge date.
+- **Anomaly flagging** — per-category spend spikes (IQR outliers) and notable
+  first-time merchants, tuned for precision.
+- **Weekly email digest** — a background scheduler independently emails a summary
+  (spend vs. prior week, top categories, upcoming subscriptions, anomalies).
+- **Authentication** — multi-user with bcrypt-hashed passwords, short-lived JWT
+  access tokens + rotating refresh tokens, all delivered as **httpOnly cookies**.
+- **Analytics dashboard** — summary cards, spend-by-category, monthly trends,
+  subscriptions, alerts, and an editable transactions table (React + Recharts).
 
 ## Architecture
 
-A single ingestion endpoint funnels statements through an ETL + categorization
-stage into one database. From there the data forks into **two independent
-consumers** — an analytics API and (roadmap) a scheduler — that share only the
-database and never call each other.
+A single ingestion path funnels data into one database, which then **forks into
+two independent consumers** — the analytics API and the scheduler — that share
+*only* the database and never call each other. That decoupling is deliberate.
 
 ```
-Statement upload (CSV)
-   │
-   ▼
-Ingestion API ──► ETL + categorization ──► Database (SQLite dev / PostgreSQL prod)
-                                              │
-                        ┌─────────────────────┴─────────────────────┐
-                        ▼                                            ▼
-                 Analytics API                              Scheduler job  (roadmap)
-                        │                                            │
-                        ▼                                            ▼
-                 React dashboard                              Email digest  (roadmap)
+              ┌──────────────────────────────────────────┐
+   CSV  ─────▶│  Ingestion API                           │
+  upload      │  schema inference → ETL → categorization  │
+              └───────────────────────┬──────────────────┘
+                                      ▼
+                          ┌───────────────────────┐
+                          │  Database (SQLite/PG)  │
+                          └───────────┬───────────┘
+                          ┌───────────┴────────────┐
+                          ▼                         ▼
+                 ┌─────────────────┐      ┌──────────────────┐
+                 │  Analytics API  │      │  Scheduler (job) │
+                 │  + subs/anomaly │      │  weekly digest   │
+                 └────────┬────────┘      └────────┬─────────┘
+                          ▼                         ▼
+                 ┌─────────────────┐      ┌──────────────────┐
+                 │ React dashboard │      │  Email (SMTP)    │
+                 └─────────────────┘      └──────────────────┘
 ```
 
 ## Tech stack
 
-| Layer      | Choice                                                   |
-|------------|----------------------------------------------------------|
-| Backend    | FastAPI, SQLAlchemy 2.0, Pydantic v2                      |
-| ML         | scikit-learn (TF-IDF char n-grams + Multinomial NB)      |
-| ETL        | pandas                                                    |
-| Database   | SQLite for local dev, PostgreSQL as the production target |
-| Frontend   | React + TypeScript (Vite), Recharts                      |
+| Layer    | Choice                                                            |
+|----------|-------------------------------------------------------------------|
+| Backend  | FastAPI, SQLAlchemy 2.0, Pydantic v2                               |
+| Auth     | JWT (PyJWT) + bcrypt, httpOnly cookies, rotating refresh tokens    |
+| ML / ETL | scikit-learn (TF-IDF + Naive Bayes), pandas                       |
+| Scheduler| APScheduler                                                       |
+| Database | SQLite for local dev · **PostgreSQL** as the production target     |
+| Frontend | React + TypeScript (Vite), Recharts                               |
 
-The data layer is written against SQLAlchemy, so switching from SQLite to
-PostgreSQL is a one-line `DATABASE_URL` change — no query changes.
+The data layer is pure SQLAlchemy, so switching SQLite → PostgreSQL is a one-line
+`DATABASE_URL` change with no query edits.
 
 ## Data model
 
-- **accounts** — one row per bank / credit account tracked
-- **transactions** — normalized line items (date, merchant, amount, description,
-  category, recurring flag) with a dedupe hash so re-uploaded statements don't
-  double-count
-- **categories** — system defaults plus user overrides
-- **subscriptions** — derived recurring-merchant cadences *(roadmap)*
-- **anomalies** — flagged transactions with a reason code *(roadmap)*
+`users`, `refresh_tokens`, `accounts`, `transactions`, `categories`,
+`subscriptions` (derived), `anomalies` (derived). Every account is scoped to a
+user; subscriptions and anomalies are recomputed from transactions on each upload.
 
-## Categorization
+## Getting started
 
-Two-tier, as proposed:
+**Prerequisites:** Python 3.11+, Node 18+.
 
-1. **Rule-based** keyword matching on merchant text — deterministic and useful
-   from the very first upload.
-2. **ML fallback** — a Naive Bayes classifier trained on the labelled history
-   (rule hits + user corrections). Consulted only when no rule fires.
-
-When a user corrects a category in the dashboard, that transaction is stored
-with `category_source = "user"` and becomes a training example for every later
-upload — the human-in-the-loop feedback path.
-
-## Running it locally
-
-### Backend
+### 1. Backend
 
 ```bash
 cd backend
 python -m venv .venv
 # Windows: .venv\Scripts\activate   |   macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # defaults to SQLite — no DB install needed
+cp .env.example .env            # defaults to SQLite — no DB install needed
 uvicorn app.main:app --reload --port 8123
 ```
 
-API docs: <http://localhost:8123/docs>
+API runs at `http://localhost:8123` · interactive docs at `/docs`.
 
-### Frontend
+### 2. Frontend
 
 ```bash
 cd frontend
 npm install
-npm run dev          # http://localhost:5173 (proxies /api to the backend)
+npm run dev                     # http://localhost:5173 (proxies /api to the backend)
 ```
 
-Open the dashboard and click **Upload statement** — try
-`backend/sample_data/sample_statement.csv`.
+Open `http://localhost:5173`, create an account, then **Upload statement** — try
+`backend/sample_data/sample_statement.csv` (or the real `anz.csv`).
 
-### Tests
+### 3. Email digest (optional)
+
+Without SMTP, digests are written to `backend/digest_outbox/` so the feature is
+fully demoable. To send real email, set the `SMTP_*` vars in `.env` (Mailtrap is
+a great no-risk test inbox). Set `DIGEST_INTERVAL_MINUTES=2` to watch the
+scheduler fire on a short loop.
+
+## Tests
 
 ```bash
-cd backend && pytest -q
+cd backend && pytest -q        # 23 tests: ETL, categorization, subscriptions,
+                               # anomalies, digest rendering, and auth/isolation
 ```
 
 ## API overview
 
-| Method & path                                          | Purpose                                  |
-|--------------------------------------------------------|------------------------------------------|
-| `POST /api/accounts`                                   | Create an account                        |
-| `GET  /api/accounts`                                   | List accounts                            |
-| `POST /api/accounts/{id}/statements`                   | Upload a CSV statement (ingestion)       |
-| `GET  /api/accounts/{id}/transactions`                 | List transactions                        |
-| `PATCH /api/transactions/{id}/category`                | Correct a category (trains the model)    |
-| `GET  /api/accounts/{id}/analytics/summary`            | Spend / income / net / top category      |
-| `GET  /api/accounts/{id}/analytics/by-category`        | Spend grouped by category                |
-| `GET  /api/accounts/{id}/analytics/trends`             | Monthly spend vs income                  |
+| Area      | Endpoints                                                          |
+|-----------|-------------------------------------------------------------------|
+| Auth      | `POST /api/auth/register` · `login` · `refresh` · `logout` · `GET /me` |
+| Accounts  | `POST/GET /api/accounts` · `PATCH /api/accounts/{id}`             |
+| Ingestion | `POST /api/statements/preview` · `POST /api/accounts/{id}/statements` |
+| Analytics | `GET /api/accounts/{id}/analytics/{summary,by-category,trends}`    |
+| Insights  | `GET /api/accounts/{id}/{subscriptions,anomalies}`                |
+| Digest    | `GET .../digest/preview` · `POST .../digest/send` · `GET /api/automation/status` |
 
-## Supported statement formats
+Every account-scoped endpoint verifies ownership and returns 404 for another
+user's data (so it never leaks which IDs exist).
 
-The ETL parser maps common header spellings onto canonical fields, so most
-exports work without manual mapping:
+## Security notes
 
-- A unified **`Amount`** column (negative = spend), **or** separate
-  **`Debit` / `Credit`** columns
-- Date headers like `Date`, `Posted Date`, `Transaction Date`
-- Merchant headers like `Description`, `Merchant`, `Payee`, `Narrative`
-- Currency formatting (`$`, thousands separators, accounting `(123.45)` negatives)
+- Passwords: **bcrypt**. Tokens: **httpOnly cookies** (JS can't read them).
+- **15-min access token + 7-day rotating refresh token**; refresh-token reuse is
+  detected and revokes the whole session family.
+- Login is **rate-limited**. Set a strong `JWT_SECRET_KEY` and `COOKIE_SECURE=true`
+  (HTTPS) in production.
 
-## Roadmap (Week 2 — "industry-grade")
+## Project structure
 
-- [ ] Recurring-subscription detection
-- [ ] Anomaly flagging (spend spikes, new merchants)
-- [ ] Scheduled weekly email digest
-- [ ] JWT auth for multi-user support
-- [ ] Deployment (Render/Railway + Vercel)
 ```
+backend/
+  app/
+    routers/     auth · ingestion · analytics · automation
+    services/    schema_inference · etl · categorization · pipeline
+                 subscriptions · anomalies · digest · mailer
+    models.py · schemas.py · security.py · scheduler.py · database.py · config.py
+  tests/         pytest suite
+  sample_data/   sample_statement.csv · anz.csv
+frontend/
+  src/           App.tsx · AuthScreen.tsx · api.ts (+ css)
+```
+
+## Roadmap
+
+- [x] Smart ingestion + categorization + analytics dashboard
+- [x] Subscription detection · anomaly flagging · weekly email digest
+- [x] Multi-user JWT auth (httpOnly cookies, refresh rotation)
+- [ ] Deployment (PostgreSQL on Render/Railway + frontend on Vercel)
+- [ ] CSRF double-submit token (defense-in-depth beyond SameSite cookies)

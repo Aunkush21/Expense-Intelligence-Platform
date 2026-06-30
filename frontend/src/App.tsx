@@ -14,13 +14,17 @@ import {
 } from 'recharts'
 import {
   api,
+  setUnauthorizedHandler,
   type Account,
+  type Anomaly,
   type CategorySpend,
   type MonthlyTrend,
   type SchemaPreview,
+  type Subscription,
   type SummaryStats,
   type Transaction,
 } from './api'
+import AuthScreen from './AuthScreen'
 import './App.css'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -51,15 +55,25 @@ const money = (n: number) =>
 const moneyTooltip = (v: unknown) => money(Number(v))
 
 export default function App() {
+  // null = still checking the session cookie; then true/false.
+  const [authed, setAuthed] = useState<boolean | null>(null)
   const [account, setAccount] = useState<Account | null>(null)
   const [summary, setSummary] = useState<SummaryStats | null>(null)
   const [byCategory, setByCategory] = useState<CategorySpend[]>([])
   const [trends, setTrends] = useState<MonthlyTrend[]>([])
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([])
   const [txns, setTxns] = useState<Transaction[]>([])
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<SchemaPreview | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [digest, setDigest] = useState<{ subject: string; body: string } | null>(null)
+  const [scheduler, setScheduler] = useState<{
+    cadence: string
+    next_run: string | null
+    delivery_mode: string
+  } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const flash = (msg: string, err = false) => {
@@ -68,20 +82,35 @@ export default function App() {
   }
 
   const loadAnalytics = useCallback(async (accountId: number) => {
-    const [s, c, t, tx] = await Promise.all([
+    const [s, c, t, subs, anom, tx] = await Promise.all([
       api.summary(accountId),
       api.byCategory(accountId),
       api.trends(accountId),
+      api.subscriptions(accountId),
+      api.anomalies(accountId),
       api.transactions(accountId),
     ])
     setSummary(s)
     setByCategory(c)
     setTrends(t)
+    setSubscriptions(subs)
+    setAnomalies(anom)
     setTxns(tx)
   }, [])
 
-  // On first load, reuse an existing account or create a demo one.
+  // Route 401s (expired/invalid token) back to the login screen, and check for
+  // an existing session cookie on first load.
   useEffect(() => {
+    setUnauthorizedHandler(() => setAuthed(false))
+    api
+      .me()
+      .then(() => setAuthed(true))
+      .catch(() => setAuthed(false))
+  }, [])
+
+  // Once authenticated, reuse the user's account or create their first one.
+  useEffect(() => {
+    if (!authed) return
     ;(async () => {
       try {
         const accounts = await api.listAccounts()
@@ -93,7 +122,20 @@ export default function App() {
         flash((e as Error).message, true)
       }
     })()
-  }, [loadAnalytics])
+  }, [authed, loadAnalytics])
+
+  const onLogout = async () => {
+    try {
+      await api.logout()
+    } finally {
+      setAccount(null)
+      setSummary(null)
+      setTxns([])
+      setSubscriptions([])
+      setAnomalies([])
+      setAuthed(false)
+    }
+  }
 
   // Step 1: infer how the file's columns map before importing anything.
   const onFileSelected = async (file: File) => {
@@ -132,6 +174,37 @@ export default function App() {
     setPendingFile(null)
   }
 
+  const onPreviewDigest = async () => {
+    if (!account) return
+    setBusy(true)
+    try {
+      const [d, status] = await Promise.all([
+        api.digestPreview(account.id),
+        api.schedulerStatus(),
+      ])
+      setDigest({ subject: d.subject, body: d.body })
+      setScheduler(status)
+    } catch (e) {
+      flash((e as Error).message, true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onSendDigest = async () => {
+    if (!account) return
+    setBusy(true)
+    try {
+      const res = await api.sendDigest(account.id)
+      flash(`Digest ${res.delivery}`)
+      setDigest(null)
+    } catch (e) {
+      flash((e as Error).message, true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const onClearData = async () => {
     if (!account) return
     if (!confirm('Delete all transactions for this account? This cannot be undone.'))
@@ -160,6 +233,10 @@ export default function App() {
 
   const hasData = txns.length > 0
 
+  if (authed === null)
+    return <div className="app-loading">Loading…</div>
+  if (!authed) return <AuthScreen onAuthed={() => setAuthed(true)} />
+
   return (
     <div className="app">
       <header className="topbar">
@@ -179,12 +256,20 @@ export default function App() {
             onChange={(e) => e.target.files?.[0] && onFileSelected(e.target.files[0])}
           />
           {hasData && (
+            <button className="ghost" disabled={busy} onClick={onPreviewDigest}>
+              Weekly digest
+            </button>
+          )}
+          {hasData && (
             <button className="ghost" disabled={busy} onClick={onClearData}>
               Clear data
             </button>
           )}
           <button disabled={busy} onClick={() => fileRef.current?.click()}>
             {busy ? 'Processing…' : 'Upload statement (CSV)'}
+          </button>
+          <button className="ghost" onClick={onLogout}>
+            Log out
           </button>
         </div>
       </header>
@@ -201,6 +286,8 @@ export default function App() {
       ) : (
         <>
           <SummaryCards summary={summary} />
+
+          <AnomaliesPanel anomalies={anomalies} />
 
           <div className="grid-2">
             <div className="panel">
@@ -251,6 +338,8 @@ export default function App() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          <SubscriptionsPanel subscriptions={subscriptions} />
 
           <div className="panel">
             <h3>
@@ -311,6 +400,45 @@ export default function App() {
           onConfirm={confirmImport}
           onCancel={cancelImport}
         />
+      )}
+
+      {digest && (
+        <div className="modal-overlay" onClick={() => setDigest(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Weekly email digest</h2>
+            <p className="muted">
+              This is what the scheduled job emails out — the same content,
+              generated straight from the database.
+            </p>
+            {scheduler && (
+              <div className="sched-status">
+                <span>
+                  Scheduler: <strong>{scheduler.cadence}</strong>
+                </span>
+                <span>
+                  Delivery: <strong>{scheduler.delivery_mode}</strong>
+                </span>
+                {scheduler.next_run && (
+                  <span>
+                    Next run:{' '}
+                    <strong>
+                      {new Date(scheduler.next_run).toLocaleString()}
+                    </strong>
+                  </span>
+                )}
+              </div>
+            )}
+            <pre className="digest-body">{digest.body}</pre>
+            <div className="modal-actions">
+              <button className="ghost" onClick={() => setDigest(null)}>
+                Close
+              </button>
+              <button disabled={busy} onClick={onSendDigest}>
+                {busy ? 'Sending…' : 'Send now'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && <div className={`toast ${toast.err ? 'err' : ''}`}>{toast.msg}</div>}
@@ -417,6 +545,100 @@ const tooltipStyle = {
   border: '1px solid #2c3947',
   borderRadius: 8,
   fontSize: 12,
+}
+
+const ANOMALY_LABEL: Record<string, string> = {
+  spend_spike: 'Spend spike',
+  new_merchant: 'New merchant',
+}
+
+function AnomaliesPanel({ anomalies }: { anomalies: Anomaly[] }) {
+  if (anomalies.length === 0) return null // hide entirely when all-clear
+  return (
+    <div className="panel alerts">
+      <h3>
+        Alerts <span className="hint">{anomalies.length} flagged this period</span>
+      </h3>
+      <div className="alert-list">
+        {anomalies.map((a) => (
+          <div className="alert-row" key={a.id}>
+            <span className={`tag tag-${a.reason_code}`}>
+              {ANOMALY_LABEL[a.reason_code] ?? a.reason_code}
+            </span>
+            <span className="alert-detail">{a.detail}</span>
+            <span className="alert-meta">
+              {a.txn_date} · {a.category}
+            </span>
+            <span className="amount-out alert-amount">{money(a.amount)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SubscriptionsPanel({ subscriptions }: { subscriptions: Subscription[] }) {
+  const monthlyTotal = subscriptions.reduce((sum, s) => {
+    const perMonth =
+      s.cadence === 'weekly'
+        ? s.average_amount * 4.33
+        : s.cadence === 'biweekly'
+          ? s.average_amount * 2.17
+          : s.cadence === 'yearly'
+            ? s.average_amount / 12
+            : s.cadence === 'quarterly'
+              ? s.average_amount / 3
+              : s.average_amount // monthly
+    return sum + perMonth
+  }, 0)
+
+  return (
+    <div className="panel">
+      <h3>
+        Recurring subscriptions{' '}
+        <span className="hint">
+          {subscriptions.length
+            ? `~${money(monthlyTotal)}/mo across ${subscriptions.length}`
+            : 'detected automatically from charge cadence'}
+        </span>
+      </h3>
+      {subscriptions.length === 0 ? (
+        <p className="muted" style={{ margin: 0 }}>
+          No recurring charges detected yet. They appear once a merchant bills you
+          on a regular cadence (e.g. monthly) for a stable amount.
+        </p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Merchant</th>
+              <th>Cadence</th>
+              <th>Seen</th>
+              <th>Next charge</th>
+              <th style={{ textAlign: 'right' }}>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {subscriptions.map((s) => (
+              <tr key={s.id}>
+                <td>{s.merchant}</td>
+                <td>
+                  <span className="pill">{s.cadence}</span>
+                </td>
+                <td style={{ color: 'var(--text-dim)' }}>{s.occurrences}×</td>
+                <td style={{ color: 'var(--text-dim)' }}>
+                  {s.next_expected ?? '—'}
+                </td>
+                <td style={{ textAlign: 'right' }} className="amount-out">
+                  {money(-s.average_amount)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
 }
 
 function SummaryCards({ summary }: { summary: SummaryStats | null }) {
