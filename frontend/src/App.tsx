@@ -42,14 +42,23 @@ const CATEGORIES = [
   'Transfers', 'Fees', 'Uncategorized',
 ]
 
+// Indigo-led categorical palette, calm and premium.
 const COLORS = [
-  '#14b8a6', '#0ea5e9', '#a78bfa', '#f472b6', '#fbbf24',
-  '#34d399', '#fb923c', '#60a5fa', '#f87171', '#c084fc',
-  '#2dd4bf', '#94a3b8', '#475569',
+  '#4338ca', '#0d9488', '#7c3aed', '#b45309', '#be123c',
+  '#047857', '#2563eb', '#db2777', '#0891b2', '#ca8a04',
+  '#6366f1', '#475569', '#9333ea',
 ]
 
+const fmtDay = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+
+// Indian Rupee with Indian digit grouping (lakh/crore), e.g. ₹1,23,456.78
 const money = (n: number) =>
-  n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  n.toLocaleString('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+  })
 
 // Recharts tooltip formatter receives a loosely-typed value; coerce to number.
 const moneyTooltip = (v: unknown) => money(Number(v))
@@ -276,16 +285,20 @@ export default function App() {
 
       {!hasData ? (
         <div className="empty">
-          <h2>No transactions yet</h2>
+          <div className="empty-mark">₹</div>
+          <h2>Let's make sense of your money</h2>
           <p>
-            Upload a bank or credit-card CSV export to categorize spending and
-            surface trends. Try{' '}
-            <code>backend/sample_data/sample_statement.csv</code>.
+            Upload a bank or UPI statement (CSV) and we'll categorize every
+            transaction, spot your subscriptions, and flag anything unusual. Try the
+            included <code>sample_statement_india.csv</code> to see it in action.
           </p>
+          <button disabled={busy} onClick={() => fileRef.current?.click()}>
+            {busy ? 'Processing…' : 'Upload your first statement'}
+          </button>
         </div>
       ) : (
         <>
-          <SummaryCards summary={summary} />
+          <CashFlowHero summary={summary} />
 
           <AnomaliesPanel anomalies={anomalies} />
 
@@ -379,7 +392,7 @@ export default function App() {
                       </td>
                       <td
                         style={{ textAlign: 'right' }}
-                        className={t.amount < 0 ? 'amount-out' : 'amount-in'}
+                        className={`amount ${t.amount < 0 ? 'amount-out' : 'amount-in'}`}
                       >
                         {money(t.amount)}
                       </td>
@@ -499,7 +512,7 @@ function PreviewModal({
                     <td>{r.merchant}</td>
                     <td
                       style={{ textAlign: 'right' }}
-                      className={r.amount < 0 ? 'amount-out' : 'amount-in'}
+                      className={`amount ${r.amount < 0 ? 'amount-out' : 'amount-in'}`}
                     >
                       {money(r.amount)}
                     </td>
@@ -541,10 +554,12 @@ function PreviewModal({
 }
 
 const tooltipStyle = {
-  background: '#222b38',
-  border: '1px solid #2c3947',
-  borderRadius: 8,
+  background: '#ffffff',
+  border: '1px solid #e8e6e1',
+  borderRadius: 10,
   fontSize: 12,
+  boxShadow: '0 12px 28px -16px rgba(30,27,75,0.3)',
+  color: '#1e1b4b',
 }
 
 const ANOMALY_LABEL: Record<string, string> = {
@@ -629,7 +644,7 @@ function SubscriptionsPanel({ subscriptions }: { subscriptions: Subscription[] }
                 <td style={{ color: 'var(--text-dim)' }}>
                   {s.next_expected ?? '—'}
                 </td>
-                <td style={{ textAlign: 'right' }} className="amount-out">
+                <td style={{ textAlign: 'right' }} className="amount amount-out">
                   {money(-s.average_amount)}
                 </td>
               </tr>
@@ -641,32 +656,52 @@ function SubscriptionsPanel({ subscriptions }: { subscriptions: Subscription[] }
   )
 }
 
-function SummaryCards({ summary }: { summary: SummaryStats | null }) {
+function CashFlowHero({ summary }: { summary: SummaryStats | null }) {
   if (!summary) return null
+  const overspent = summary.net < 0
+  const income = summary.total_income
+  const spent = summary.total_spend
+  const spentPct =
+    income > 0 ? Math.min(100, (spent / income) * 100) : spent > 0 ? 100 : 0
+  const period =
+    summary.start_date && summary.end_date
+      ? `${fmtDay(summary.start_date)} – ${fmtDay(summary.end_date)}`
+      : '—'
+
   return (
-    <div className="cards">
-      <div className="card">
-        <div className="label">Total spend</div>
-        <div className="value neg">{money(summary.total_spend)}</div>
-        <div className="sub">{summary.transaction_count} transactions</div>
+    <section className="cashflow">
+      <div className="cashflow-head">
+        <span className="eyebrow">This period · {period}</span>
+        <span className="cashflow-count">
+          {summary.transaction_count} transactions
+          {summary.top_category ? ` · most on ${summary.top_category}` : ''}
+        </span>
       </div>
-      <div className="card">
-        <div className="label">Total income</div>
-        <div className="value pos">{money(summary.total_income)}</div>
-      </div>
-      <div className="card">
-        <div className="label">Net</div>
-        <div className={`value ${summary.net < 0 ? 'neg' : 'pos'}`}>
-          {money(summary.net)}
+      <div className="cashflow-main">
+        <div className="cashflow-net">
+          <span className="cashflow-label">
+            {overspent ? 'You overspent' : 'You saved'}
+          </span>
+          <span className={`money-display ${overspent ? 'neg' : 'pos'}`}>
+            {money(Math.abs(summary.net))}
+          </span>
+        </div>
+        <div className="cashflow-flow">
+          <div className="flow-bar">
+            <span className="flow-spent" style={{ width: `${spentPct}%` }} />
+          </div>
+          <div className="flow-legend">
+            <span>
+              <i className="dot dot-income" />
+              Income <span className="money-figure">{money(income)}</span>
+            </span>
+            <span>
+              <i className="dot dot-spend" />
+              Spent <span className="money-figure">{money(spent)}</span>
+            </span>
+          </div>
         </div>
       </div>
-      <div className="card">
-        <div className="label">Top category</div>
-        <div className="value">{summary.top_category ?? '—'}</div>
-        <div className="sub">
-          {summary.start_date} → {summary.end_date}
-        </div>
-      </div>
-    </div>
+    </section>
   )
 }

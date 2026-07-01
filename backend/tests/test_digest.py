@@ -19,9 +19,9 @@ def test_render_active_digest():
     subject, body = render_text(digest)
 
     assert "Jun 22" in subject and "Jun 28" in subject
-    assert "$78.60" in body
+    assert "₹78.60" in body
     assert "down 46.5%" in body
-    assert "Shopping: $52.30" in body
+    assert "Shopping: ₹52.30" in body
 
 
 def test_render_empty_digest():

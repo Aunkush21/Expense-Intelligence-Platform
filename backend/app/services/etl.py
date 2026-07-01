@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -56,6 +57,54 @@ def _make_hash(account_id: int, txn_date: date, merchant: str, amount: float) ->
     return hashlib.sha256(key.encode()).hexdigest()
 
 
+_DMY_RE = re.compile(r"^\s*(\d{1,2})[/-](\d{1,2})[/-]\d{2,4}")
+
+
+def _infer_dayfirst(series: pd.Series) -> bool:
+    """Detect whether dd/mm or mm/dd by scanning which position exceeds 12.
+
+    Falls back to day-first (the Indian/most-of-world convention) when ambiguous.
+    ISO dates (YYYY-MM-DD) don't match this and parse correctly regardless.
+    """
+    first_max = second_max = 0
+    for value in series.dropna().astype(str).head(300):
+        match = _DMY_RE.match(value)
+        if not match:
+            continue
+        first_max = max(first_max, int(match.group(1)))
+        second_max = max(second_max, int(match.group(2)))
+    if first_max == 0 and second_max == 0:
+        return False  # no dd/mm-style dates (e.g. ISO YYYY-MM-DD) — parse natively
+    if second_max > 12 and first_max <= 12:
+        return False  # mm/dd/yyyy
+    return True  # dd/mm/yyyy, or ambiguous -> India default (day-first)
+
+
+# Bank-rail prefixes/tokens that aren't the actual merchant name.
+_TXN_NOISE = {
+    "UPI", "POS", "NEFT", "IMPS", "RTGS", "ACH", "ATM", "DR", "CR", "REF", "TXN",
+    "PAYMENT", "PAY", "PMT", "PYMT", "NA", "TO", "FROM", "VPA", "ECOM", "INB", "BIL",
+}
+_MERCHANT_SPLIT = re.compile(r"[/\-\s|:*#]+")
+
+
+def clean_merchant_name(raw: str) -> str:
+    """Extract a clean merchant from UPI/POS/NEFT narrations.
+
+    `UPI/SWIGGY/abc@ybl/...` -> `SWIGGY`. Plain merchant names (no bank rail) are
+    returned unchanged so we don't mangle normal statements.
+    """
+    text = raw.strip()
+    tokens = [t for t in _MERCHANT_SPLIT.split(text) if t]
+    upper = {t.upper() for t in tokens}
+    if not (upper & {"UPI", "POS", "NEFT", "IMPS", "RTGS", "ACH"}):
+        return text[:200]
+    for token in tokens:
+        if len(token) >= 3 and token.isalpha() and token.upper() not in _TXN_NOISE:
+            return token[:200]
+    return text[:200]
+
+
 def _read_csv(file_bytes: bytes) -> pd.DataFrame:
     try:
         return pd.read_csv(io.BytesIO(file_bytes))
@@ -88,31 +137,37 @@ def parse_statement(file_bytes: bytes, account_id: int) -> ParseResult:
 
     # Normalize each column once, vectorized — parsing dates and cleaning amounts
     # per-row (iterrows + per-value to_datetime) is the slow path on large files.
-    dates = pd.to_datetime(df[m["date"]], errors="coerce")
+    # Day-first is auto-detected so Indian DD/MM/YYYY parses correctly.
+    dates = pd.to_datetime(
+        df[m["date"]], errors="coerce", dayfirst=_infer_dayfirst(df[m["date"]])
+    )
     merchants = df[m["merchant"]].astype(str).str.strip()
     amounts, no_sign_info = _resolve_amounts(df, m)
 
     rows: list[NormalizedRow] = []
     skipped = 0
-    for txn_dt, merchant, amount in zip(dates, merchants, amounts):
+    for txn_dt, raw_merchant, amount in zip(dates, merchants, amounts):
         if (
             pd.isna(txn_dt)
             or pd.isna(amount)
             or amount == 0
-            or not merchant
-            or merchant.lower() == "nan"
+            or not raw_merchant
+            or raw_merchant.lower() == "nan"
         ):
             skipped += 1
             continue
 
         txn_date = txn_dt.date()
-        merchant = merchant[:200]
+        # Pull a clean merchant out of UPI/POS/NEFT narrations; keep the raw text
+        # as the description so categorization rules can still see "upi"/"neft".
+        merchant = clean_merchant_name(raw_merchant)
+        description = raw_merchant[:400] if merchant != raw_merchant[:200] else None
         amount = round(float(amount), 2)
         rows.append(
             NormalizedRow(
                 txn_date=txn_date,
                 merchant=merchant,
-                description=None,
+                description=description,
                 amount=amount,
                 dedupe_hash=_make_hash(account_id, txn_date, merchant, amount),
             )

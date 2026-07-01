@@ -30,19 +30,63 @@ DEFAULT_CATEGORIES = [
 
 # Keyword -> category. Matched case-insensitively as whole-ish substrings against
 # the merchant + description text. Ordering doesn't matter; first match wins.
+# Tuned India-first (Swiggy, Jio, UPI, ...) while keeping common global merchants.
 RULES: dict[str, list[str]] = {
-    "Groceries": ["walmart", "whole foods", "aldi", "kroger", "safeway", "trader joe", "grocery", "supermarket"],
-    "Dining": ["starbucks", "mcdonald", "chipotle", "restaurant", "cafe", "coffee", "pizza", "doordash", "uber eats", "grubhub"],
-    "Transport": ["uber", "lyft", "shell", "chevron", "exxon", "gas station", "parking", "transit", "metro"],
-    "Subscriptions": ["netflix", "spotify", "hulu", "disney+", "youtube premium", "amazon prime", "icloud", "dropbox", "adobe", "notion"],
-    "Shopping": ["amazon", "target", "best buy", "ebay", "etsy", "ikea", "nike"],
-    "Entertainment": ["cinema", "movie", "steam", "playstation", "xbox", "concert", "ticketmaster"],
-    "Utilities": ["electric", "water bill", "comcast", "verizon", "at&t", "t-mobile", "internet", "utility"],
-    "Health": ["pharmacy", "cvs", "walgreens", "clinic", "hospital", "gym", "fitness"],
-    "Travel": ["airlines", "delta", "united", "hotel", "airbnb", "expedia", "booking.com"],
-    "Income": ["payroll", "salary", "deposit", "direct dep", "interest"],
-    "Transfers": ["transfer", "zelle", "venmo", "paypal", "wire"],
-    "Fees": ["fee", "overdraft", "service charge", "atm"],
+    "Groceries": [
+        "bigbasket", "blinkit", "zepto", "dmart", "d mart", "reliance fresh",
+        "reliance smart", "jiomart", "more supermarket", "spencer", "grofers",
+        "natures basket", "licious", "country delight", "milkbasket",
+        "grocery", "supermarket", "kirana", "whole foods", "walmart", "trader joe",
+    ],
+    "Dining": [
+        "swiggy", "zomato", "eatsure", "dominos", "domino's", "pizza hut", "kfc",
+        "mcdonald", "burger king", "starbucks", "chaayos", "haldiram", "barbeque",
+        "cafe", "coffee", "restaurant", "biryani", "dunzo", "doordash",
+    ],
+    "Transport": [
+        "ola", "uber", "rapido", "irctc", "redbus", "indian railway", "metro",
+        "namma metro", "dmrc", "fastag", "indianoil", "iocl", "hpcl", "bharat petroleum",
+        "bpcl", "shell", "petrol", "fuel", "parking", "blu smart", "blusmart",
+    ],
+    "Subscriptions": [
+        "netflix", "hotstar", "jio cinema", "jiocinema", "sonyliv", "zee5", "voot",
+        "spotify", "gaana", "wynk", "youtube premium", "prime video", "amazon prime",
+        "audible", "google one", "icloud", "adobe", "canva", "linkedin premium",
+    ],
+    "Shopping": [
+        "flipkart", "myntra", "ajio", "meesho", "nykaa", "amazon", "tatacliq",
+        "tata cliq", "snapdeal", "croma", "reliance digital", "decathlon", "ikea",
+        "lenskart", "firstcry", "shopping",
+    ],
+    "Entertainment": [
+        "bookmyshow", "pvr", "inox", "cinema", "movie", "steam", "playstation",
+        "xbox", "dream11", "mpl", "rummy", "gaming",
+    ],
+    "Utilities": [
+        "jio", "airtel", "vodafone", "vi ", "bsnl", "tata power", "adani electricity",
+        "bescom", "mseb", "torrent power", "electricity", "broadband", "act fibernet",
+        "actfibernet", "hathway", "gas bill", "indane", "water bill", "recharge", "dth",
+    ],
+    "Health": [
+        "pharmeasy", "1mg", "tata 1mg", "apollo", "netmeds", "practo", "cult",
+        "cultfit", "medplus", "pharmacy", "hospital", "clinic", "diagnostic", "lab",
+    ],
+    "Travel": [
+        "makemytrip", "goibibo", "ixigo", "cleartrip", "easemytrip", "indigo",
+        "vistara", "air india", "spicejet", "oyo", "airbnb", "hotel", "irctc air",
+    ],
+    "Income": [
+        "salary", "payroll", "neft cr", "imps cr", "interest", "dividend",
+        "refund", "cashback", "credited",
+    ],
+    "Transfers": [
+        "upi", "neft", "imps", "rtgs", "paytm", "phonepe", "google pay", "gpay",
+        "bhim", "transfer", "self", "wallet", "razorpay", "cred",
+    ],
+    "Fees": [
+        "fee", "charges", "charge", "gst", "penalty", "atm wdl", "amc", "annual fee",
+        "convenience fee", "overdraft",
+    ],
 }
 
 

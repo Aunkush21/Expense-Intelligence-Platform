@@ -24,6 +24,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models import Anomaly, Transaction
+from app.services.formatting import format_inr
 
 # A category needs at least this many charges before an outlier is meaningful.
 MIN_CATEGORY_SAMPLES = 4
@@ -61,7 +62,7 @@ def _percentile(sorted_vals: list[float], p: float) -> float:
 
 
 def _money(value: float) -> str:
-    return f"${value:,.2f}"
+    return format_inr(value)
 
 
 def _detect_spikes(by_category: dict[str, list[Transaction]]) -> list[AnomalyHit]:

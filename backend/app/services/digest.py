@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Account, Anomaly, Subscription, Transaction
+from app.services.formatting import format_inr
 
 WINDOW_DAYS = 7
 
@@ -149,7 +150,7 @@ def build_digest(db: Session, account_id: int) -> Digest | None:
 
 
 def _money(v: float) -> str:
-    return f"${v:,.2f}"
+    return format_inr(v)
 
 
 def render_text(digest: Digest) -> tuple[str, str]:

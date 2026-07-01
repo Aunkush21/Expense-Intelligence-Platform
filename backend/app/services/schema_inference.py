@@ -29,19 +29,28 @@ SAMPLE_SIZE = 400
 
 # Header keyword hints per role (substring match on the lower-cased header).
 HEADER_HINTS: dict[str, list[str]] = {
-    "date": ["date", "posted", "trans date", "txn date", "booking", "value date"],
+    "date": [
+        "date", "posted", "trans date", "txn date", "tran date", "booking",
+        "value date", "value dt", "transaction date",
+    ],
     "merchant": [
-        "merchant", "description", "payee", "narrative", "details", "memo",
-        "particulars", "txn_description", "name", "reference", "transaction details",
+        "merchant", "description", "payee", "narrative", "narration", "details",
+        "memo", "particulars", "remarks", "txn_description", "name", "reference",
+        "transaction details", "transaction remarks",
     ],
     "amount": ["amount", "amt", "value", "transaction amount"],
     "direction": [
         "movement", "type", "transaction type", "txn type", "dr/cr", "drcr",
         "debit/credit", "indicator", "cr/dr", "direction",
     ],
+    # Indian bank exports commonly use "Withdrawal Amt." / "Deposit Amt." columns.
     "debit": ["debit", "withdrawal", "money out", "paid out", "outflow"],
     "credit": ["credit", "deposit", "money in", "paid in", "inflow"],
 }
+
+# Header words that mean a column is NOT the single signed amount (it's a balance
+# or one side of a split debit/credit layout).
+_NOT_AMOUNT = ("withdraw", "deposit", "debit", "credit", "balance")
 
 DIRECTION_TOKENS = {
     "debit", "dr", "d", "withdrawal", "wd", "out",
@@ -171,6 +180,10 @@ def _score(role: str, col: str, p: ColumnProfile) -> float:
     if role == "date":
         return h * 1.5 + p.date_rate * 2.0
     if role == "amount":
+        # The single signed-amount column must look like an amount by name and
+        # must not be a balance or one side of a debit/credit split.
+        if h == 0 or any(w in col.lower() for w in _NOT_AMOUNT):
+            return 0.0
         # Reward decimals (money), penalize id/text and date columns.
         content = p.numeric_rate * (1.3 if p.has_decimals else 0.6)
         return h * 2.0 + content - p.date_rate
@@ -203,8 +216,10 @@ def infer_schema(df: pd.DataFrame) -> InferredSchema:
     }
 
     taken: set[str] = set()
-    # Resolve in priority order so strong roles claim their column first.
-    for role in ["date", "amount", "direction", "debit", "credit", "merchant"]:
+    # Resolve in priority order so strong roles claim their column first. Split
+    # debit/credit columns are claimed before the unified amount, so an Indian
+    # "Withdrawal Amt"/"Deposit Amt" layout isn't mistaken for one amount column.
+    for role in ["date", "direction", "debit", "credit", "amount", "merchant"]:
         best_col, best_score = None, thresholds[role]
         for col in df.columns:
             if col in taken:
