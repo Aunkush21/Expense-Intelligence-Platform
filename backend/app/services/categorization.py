@@ -328,7 +328,6 @@ class MLCategorizer:
 
     def __init__(self) -> None:
         self._pipeline = None
-        self._trained_on = 0
 
     def train(self, texts: list[str], labels: list[str]) -> bool:
         """Fit the classifier. Returns True if a model was trained."""
@@ -349,7 +348,6 @@ class MLCategorizer:
             ]
         )
         self._pipeline.fit(texts, labels)
-        self._trained_on = len(texts)
         return True
 
     @property

@@ -20,11 +20,6 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
 class AccountCreate(BaseModel):
     name: str
     institution: str | None = None

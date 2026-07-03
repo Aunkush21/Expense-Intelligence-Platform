@@ -116,10 +116,12 @@ Open `http://localhost:5173`, sign up, then **Upload statement** — try
 
 ### 3. Email digest (optional)
 
-Without SMTP, digests are written to `backend/digest_outbox/` so the feature is
-fully demoable. To send real email, set the `SMTP_*` vars in `.env` (Mailtrap is
-a great no-risk test inbox). Set `DIGEST_INTERVAL_MINUTES=2` to watch the
-scheduler fire on a short loop.
+Delivery is picked automatically: **Brevo HTTP API** → SMTP → file. With no
+credentials, digests are written to `backend/digest_outbox/` so the feature is
+fully demoable. To send real email, set `BREVO_API_KEY` in `.env` (the API works
+even on hosts that block outbound SMTP) with `DIGEST_FROM` set to a verified
+Brevo sender. Set `DIGEST_INTERVAL_MINUTES=2` to watch the scheduler fire on a
+short loop.
 
 ## Tests & code quality
 
@@ -168,12 +170,21 @@ backend/
   pyproject.toml requirements.txt · requirements-dev.txt
 frontend/
   src/           App.tsx · AuthScreen.tsx · api.ts (+ css)
+Dockerfile · render.yaml · DEPLOYMENT.md   # single-image deploy (see below)
 ```
+
+## Deployment
+
+Ships as **one Docker image**: the React app is built and served by FastAPI from
+the same origin (no CORS/cookie cross-site issues). The reference setup is a
+Docker web service on **Render** backed by **PostgreSQL on Neon**, driven by
+`render.yaml`. Email sends via Brevo's HTTP API (Render blocks outbound SMTP).
+Full walkthrough in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Roadmap
 
 - [x] Smart ingestion + categorization + analytics dashboard
 - [x] Subscription detection · anomaly flagging · weekly email digest
 - [x] Multi-user JWT auth (httpOnly cookies, refresh rotation)
-- [ ] Deployment (PostgreSQL on Render/Railway + frontend on Vercel)
+- [x] Deployment — single-image Docker on Render + PostgreSQL on Neon
 - [ ] CSRF double-submit token (defense-in-depth beyond SameSite cookies)
