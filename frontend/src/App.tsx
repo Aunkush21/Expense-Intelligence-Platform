@@ -38,8 +38,8 @@ const ROLE_LABEL: Record<string, string> = {
 
 const CATEGORIES = [
   'Groceries', 'Dining', 'Transport', 'Shopping', 'Entertainment',
-  'Subscriptions', 'Utilities', 'Health', 'Travel', 'Income',
-  'Transfers', 'Fees', 'Uncategorized',
+  'Subscriptions', 'Utilities', 'Health', 'Travel', 'Education', 'Cash',
+  'Income', 'Transfers', 'Fees', 'Uncategorized',
 ]
 
 // Indigo-led categorical palette, calm and premium.
@@ -51,6 +51,13 @@ const COLORS = [
 
 const fmtDay = (iso: string) =>
   new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+
+// Categories present in the transactions, most-common first (for the filter).
+const categoryCounts = (txns: Transaction[]): [string, number][] => {
+  const m = new Map<string, number>()
+  for (const t of txns) m.set(t.category, (m.get(t.category) ?? 0) + 1)
+  return [...m.entries()].sort((a, b) => b[1] - a[1])
+}
 
 // Indian Rupee with Indian digit grouping (lakh/crore), e.g. ₹1,23,456.78
 const money = (n: number) =>
@@ -73,11 +80,13 @@ export default function App() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])
   const [txns, setTxns] = useState<Transaction[]>([])
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<SchemaPreview | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
-  const [digest, setDigest] = useState<{ subject: string; body: string } | null>(null)
+  const [digest, setDigest] = useState<{ subject: string; html: string } | null>(null)
   const [scheduler, setScheduler] = useState<{
     cadence: string
     next_run: string | null
@@ -123,8 +132,7 @@ export default function App() {
     ;(async () => {
       try {
         const accounts = await api.listAccounts()
-        const acct =
-          accounts[0] ?? (await api.createAccount('Everyday Checking', 'Demo Bank'))
+        const acct = accounts[0] ?? (await api.createAccount('My Expenses', ''))
         setAccount(acct)
         await loadAnalytics(acct.id)
       } catch (e) {
@@ -191,7 +199,7 @@ export default function App() {
         api.digestPreview(account.id),
         api.schedulerStatus(),
       ])
-      setDigest({ subject: d.subject, body: d.body })
+      setDigest({ subject: d.subject, html: d.html })
       setScheduler(status)
     } catch (e) {
       flash((e as Error).message, true)
@@ -289,8 +297,7 @@ export default function App() {
           <h2>Let's make sense of your money</h2>
           <p>
             Upload a bank or UPI statement (CSV) and we'll categorize every
-            transaction, spot your subscriptions, and flag anything unusual. Try the
-            included <code>sample_statement_india.csv</code> to see it in action.
+            transaction, spot your subscriptions, and flag anything unusual.
           </p>
           <button disabled={busy} onClick={() => fileRef.current?.click()}>
             {busy ? 'Processing…' : 'Upload your first statement'}
@@ -336,17 +343,17 @@ export default function App() {
               </h3>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={trends}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2c3947" />
-                  <XAxis dataKey="month" stroke="#8b98a9" fontSize={12} />
-                  <YAxis stroke="#8b98a9" fontSize={12} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e8e6e1" />
+                  <XAxis dataKey="month" stroke="#717185" fontSize={12} />
+                  <YAxis stroke="#717185" fontSize={12} />
                   <Tooltip
                     formatter={moneyTooltip}
                     contentStyle={tooltipStyle}
-                    cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                    cursor={{ fill: 'rgba(67,56,202,0.06)' }}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="total_income" name="Income" fill="#34d399" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="total_spend" name="Spend" fill="#f87171" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="total_income" name="Income" fill="#047857" radius={[5, 5, 0, 0]} />
+                  <Bar dataKey="total_spend" name="Spend" fill="#be123c" radius={[5, 5, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -357,38 +364,77 @@ export default function App() {
           <div className="panel">
             <h3>
               Transactions{' '}
-              <span className="hint">
-                pick a category to correct it — corrections train the model
-              </span>
+              <span className="hint">click a category to correct it — that trains the model</span>
             </h3>
+
+            {txns.some((t) => t.category === 'Uncategorized') && (
+              <div className="uncat-note">
+                <strong>What's "Uncategorized"?</strong> These are payments we
+                couldn't confidently match to a category — often a person-to-person
+                UPI transfer or an unfamiliar merchant. Click its category to set the
+                right one, and the app learns it for next time.
+              </div>
+            )}
+
             <div className="scroll">
               <table>
                 <thead>
                   <tr>
                     <th>Date</th>
                     <th>Merchant</th>
-                    <th>Category</th>
+                    <th>
+                      <div className="th-filter">
+                        <span>Category</span>
+                        <select
+                          className="cat-header-select"
+                          value={categoryFilter ?? ''}
+                          onChange={(e) => setCategoryFilter(e.target.value || null)}
+                        >
+                          <option value="">All categories</option>
+                          {categoryCounts(txns).map(([c, n]) => (
+                            <option key={c} value={c}>{c} ({n})</option>
+                          ))}
+                        </select>
+                      </div>
+                    </th>
                     <th style={{ textAlign: 'right' }}>Amount</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {txns.map((t) => (
+                  {(categoryFilter
+                    ? txns.filter((t) => t.category === categoryFilter)
+                    : txns
+                  ).map((t) => (
                     <tr key={t.id}>
-                      <td style={{ color: 'var(--text-dim)' }}>{t.txn_date}</td>
+                      <td style={{ color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                        {t.txn_date}
+                      </td>
                       <td>{t.merchant}</td>
                       <td>
-                        <select
-                          className="cat-select"
-                          value={t.category}
-                          onChange={(e) => onCorrect(t, e.target.value)}
-                        >
-                          {CATEGORIES.map((c) => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
-                        </select>{' '}
-                        <span className={`pill src-${t.category_source}`}>
-                          {t.category_source}
-                        </span>
+                        {editingId === t.id ? (
+                          <select
+                            className="cat-select"
+                            autoFocus
+                            value={t.category}
+                            onChange={(e) => {
+                              onCorrect(t, e.target.value)
+                              setEditingId(null)
+                            }}
+                            onBlur={() => setEditingId(null)}
+                          >
+                            {CATEGORIES.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <button
+                            className="cat-label"
+                            title="Click to change category"
+                            onClick={() => setEditingId(t.id)}
+                          >
+                            {t.category}
+                          </button>
+                        )}
                       </td>
                       <td
                         style={{ textAlign: 'right' }}
@@ -441,7 +487,11 @@ export default function App() {
                 )}
               </div>
             )}
-            <pre className="digest-body">{digest.body}</pre>
+            <iframe
+              className="digest-frame"
+              title="Weekly digest email preview"
+              srcDoc={digest.html}
+            />
             <div className="modal-actions">
               <button className="ghost" onClick={() => setDigest(null)}>
                 Close

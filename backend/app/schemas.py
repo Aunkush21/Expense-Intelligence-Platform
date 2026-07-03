@@ -1,4 +1,5 @@
 """Pydantic request/response models for the API layer."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -87,7 +88,8 @@ class ClearResult(BaseModel):
 class DigestPreview(BaseModel):
     account_id: int
     subject: str
-    body: str
+    body: str  # plaintext fallback
+    html: str  # rendered HTML email (chart embedded as a data URI)
 
 
 class DigestSendResult(BaseModel):

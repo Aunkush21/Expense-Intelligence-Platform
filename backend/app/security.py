@@ -10,11 +10,12 @@ Design (close to how real apps do it):
                     revoked); reuse of a revoked token revokes the whole family
                     (theft detection). This is what makes logout real.
 """
+
 from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
@@ -40,7 +41,7 @@ _CREDENTIALS_EXC = HTTPException(
 
 def _utcnow() -> datetime:
     # Naive UTC throughout, so DB-stored and computed times compare cleanly.
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 # --- Passwords ---------------------------------------------------------------
@@ -63,7 +64,9 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_access_token(subject: str) -> str:
     expire = _utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {"sub": subject, "exp": expire, "type": "access"}
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+    )
 
 
 def decode_subject(token: str) -> str | None:
@@ -175,9 +178,7 @@ def _access_token_from_request(request: Request) -> str | None:
     return None
 
 
-def get_current_user(
-    request: Request, db: Session = Depends(get_db)
-) -> User:
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     token = _access_token_from_request(request)
     if token is None:
         raise _CREDENTIALS_EXC

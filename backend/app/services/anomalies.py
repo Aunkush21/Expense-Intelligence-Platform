@@ -14,6 +14,7 @@ worse than none):
 Like subscriptions, this is a derived view: each run recomputes and replaces the
 account's anomalies.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -100,7 +101,9 @@ def _detect_new_merchants(spend: list[Transaction]) -> list[AnomalyHit]:
         return []  # not enough history to call anything "new"
 
     window_start = max(dates) - timedelta(days=RECENT_WINDOW_DAYS)
-    threshold = _percentile(sorted(abs(t.amount) for t in spend), NEW_MERCHANT_PERCENTILE)
+    threshold = _percentile(
+        sorted(abs(t.amount) for t in spend), NEW_MERCHANT_PERCENTILE
+    )
 
     first_txn: dict[str, Transaction] = {}
     for t in sorted(spend, key=lambda x: x.txn_date):
@@ -115,7 +118,10 @@ def _detect_new_merchants(spend: list[Transaction]) -> list[AnomalyHit]:
                 AnomalyHit(
                     transaction_id=t.id,
                     reason_code="new_merchant",
-                    detail=f"First-time charge from {merchant} ({_money(abs(t.amount))})",
+                    detail=(
+                        f"First-time charge from {merchant} "
+                        f"({_money(abs(t.amount))})"
+                    ),
                 )
             )
     return hits

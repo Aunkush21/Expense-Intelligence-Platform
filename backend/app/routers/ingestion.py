@@ -3,6 +3,7 @@
 Per the architecture, everything funnels through here into PostgreSQL; the
 analytics API and scheduler are downstream consumers that never call back in.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -37,7 +38,9 @@ from app.services.pipeline import ingest_rows
 router = APIRouter(prefix="/api", tags=["ingestion"])
 
 
-@router.post("/accounts", response_model=AccountOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/accounts", response_model=AccountOut, status_code=status.HTTP_201_CREATED
+)
 def create_account(
     payload: AccountCreate,
     current_user: User = Depends(get_current_user),
@@ -188,9 +191,7 @@ async def preview_statement(
         try:
             schema, _ = infer_only(raw)
         except StatementParseError as exc:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
-            ) from exc
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
         return SchemaPreview(
             usable=False,
             detected_columns=schema.columns,
@@ -241,9 +242,7 @@ def clear_transactions(
     txn_ids = select(Transaction.id).where(Transaction.account_id == account_id)
     db.execute(delete(Anomaly).where(Anomaly.transaction_id.in_(txn_ids)))
     db.execute(delete(Subscription).where(Subscription.account_id == account_id))
-    result = db.execute(
-        delete(Transaction).where(Transaction.account_id == account_id)
-    )
+    result = db.execute(delete(Transaction).where(Transaction.account_id == account_id))
     db.commit()
     return ClearResult(account_id=account_id, deleted=result.rowcount or 0)
 

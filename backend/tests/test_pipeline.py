@@ -1,4 +1,5 @@
 """Smoke tests for the ETL + categorization pipeline."""
+
 from datetime import date
 
 import pytest
@@ -57,7 +58,7 @@ def test_infers_direction_column_and_signs_amount():
     assert m["merchant"] == "txn_description"
 
     by_merchant = {r.merchant: r.amount for r in result.rows}
-    assert by_merchant["POS"] == -16.25          # debit -> spend
+    assert by_merchant["POS"] == -16.25  # debit -> spend
     assert by_merchant["PAY/SALARY"] == 2100.00  # credit -> income
 
 

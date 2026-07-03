@@ -3,6 +3,7 @@
 Works against either SQLite (local dev) or PostgreSQL (production) depending
 on DATABASE_URL — the ORM models and queries are identical for both.
 """
+
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
@@ -14,9 +15,7 @@ settings = get_settings()
 
 # check_same_thread is a SQLite-only flag needed for FastAPI's threaded workers.
 connect_args = (
-    {"check_same_thread": False}
-    if settings.database_url.startswith("sqlite")
-    else {}
+    {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
 )
 
 engine = create_engine(settings.database_url, connect_args=connect_args, future=True)

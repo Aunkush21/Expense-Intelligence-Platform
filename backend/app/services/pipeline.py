@@ -3,6 +3,7 @@
 Keeps the rule/ML categorization wiring in one place so both the ingestion
 endpoint and any future batch reprocessing share identical behavior.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -11,8 +12,8 @@ from sqlalchemy.orm import Session
 from app.models import Transaction
 from app.services.categorization import (
     MLCategorizer,
-    normalize_text,
     categorize_by_rules,
+    normalize_text,
 )
 from app.services.etl import NormalizedRow
 
@@ -24,8 +25,9 @@ def build_categorizer(db: Session) -> MLCategorizer:
     category_source='user' and become training examples for everything after.
     """
     labelled = db.execute(
-        select(Transaction.merchant, Transaction.description, Transaction.category)
-        .where(
+        select(
+            Transaction.merchant, Transaction.description, Transaction.category
+        ).where(
             Transaction.category != "Uncategorized",
             Transaction.category_source.in_(("rule", "user", "model")),
         )
@@ -39,9 +41,7 @@ def build_categorizer(db: Session) -> MLCategorizer:
     return categorizer
 
 
-def assign_category(
-    row: NormalizedRow, categorizer: MLCategorizer
-) -> tuple[str, str]:
+def assign_category(row: NormalizedRow, categorizer: MLCategorizer) -> tuple[str, str]:
     """Return (category, source) for a row: rules first, then ML, else default."""
     rule_hit = categorize_by_rules(row.merchant, row.description)
     if rule_hit:
@@ -67,9 +67,7 @@ def ingest_rows(
     # Pre-load existing hashes for this account to skip re-uploaded lines cheaply.
     existing = set(
         db.execute(
-            select(Transaction.dedupe_hash).where(
-                Transaction.account_id == account_id
-            )
+            select(Transaction.dedupe_hash).where(Transaction.account_id == account_id)
         ).scalars()
     )
 

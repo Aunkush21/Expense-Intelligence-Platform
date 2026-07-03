@@ -3,6 +3,7 @@
 Wires together the ingestion and analytics routers, initializes the database,
 and seeds the default category taxonomy on startup.
 """
+
 from __future__ import annotations
 
 import logging

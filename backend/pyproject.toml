@@ -1,0 +1,23 @@
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+# A pragmatic senior-level rule set: correctness (E/F/B), import order (I),
+# modern syntax (UP), naming (N), and readability (SIM/C4/RET/PIE).
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "C4", "RET", "PIE"]
+ignore = [
+    # FastAPI's dependency injection intentionally puts `Depends()`, `File()`,
+    # etc. in argument defaults — that's the framework's idiom, not a bug.
+    "B008",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+# digest.py holds the HTML email template — inline-CSS lines are long by nature.
+"app/services/digest.py" = ["E501"]
+
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::UserWarning"]

@@ -18,6 +18,7 @@ A statement is usable only if we can fill `date`, `merchant`, and at least one o
 {`amount`, `debit`/`credit`}. Anything else (e.g. an ML feature dataset) is
 rejected with an explanation rather than silently producing junk.
 """
+
 from __future__ import annotations
 
 import re
@@ -30,18 +31,44 @@ SAMPLE_SIZE = 400
 # Header keyword hints per role (substring match on the lower-cased header).
 HEADER_HINTS: dict[str, list[str]] = {
     "date": [
-        "date", "posted", "trans date", "txn date", "tran date", "booking",
-        "value date", "value dt", "transaction date",
+        "date",
+        "posted",
+        "trans date",
+        "txn date",
+        "tran date",
+        "booking",
+        "value date",
+        "value dt",
+        "transaction date",
     ],
     "merchant": [
-        "merchant", "description", "payee", "narrative", "narration", "details",
-        "memo", "particulars", "remarks", "txn_description", "name", "reference",
-        "transaction details", "transaction remarks",
+        "merchant",
+        "description",
+        "payee",
+        "narrative",
+        "narration",
+        "details",
+        "memo",
+        "particulars",
+        "remarks",
+        "txn_description",
+        "name",
+        "reference",
+        "transaction details",
+        "transaction remarks",
     ],
     "amount": ["amount", "amt", "value", "transaction amount"],
     "direction": [
-        "movement", "type", "transaction type", "txn type", "dr/cr", "drcr",
-        "debit/credit", "indicator", "cr/dr", "direction",
+        "movement",
+        "type",
+        "transaction type",
+        "txn type",
+        "dr/cr",
+        "drcr",
+        "debit/credit",
+        "indicator",
+        "cr/dr",
+        "direction",
     ],
     # Indian bank exports commonly use "Withdrawal Amt." / "Deposit Amt." columns.
     "debit": ["debit", "withdrawal", "money out", "paid out", "outflow"],
@@ -53,8 +80,17 @@ HEADER_HINTS: dict[str, list[str]] = {
 _NOT_AMOUNT = ("withdraw", "deposit", "debit", "credit", "balance")
 
 DIRECTION_TOKENS = {
-    "debit", "dr", "d", "withdrawal", "wd", "out",
-    "credit", "cr", "c", "deposit", "in",
+    "debit",
+    "dr",
+    "d",
+    "withdrawal",
+    "wd",
+    "out",
+    "credit",
+    "cr",
+    "c",
+    "deposit",
+    "in",
 }
 CREDIT_TOKENS = {"credit", "cr", "c", "deposit", "in", "inflow"}
 
@@ -144,9 +180,7 @@ def _profile_column(series: pd.Series) -> ColumnProfile:
     non_numeric = sample[[x is None for x in nums]]
     text_rate = len(non_numeric) / n
     avg_len = float(non_numeric.str.len().mean()) if len(non_numeric) else 0.0
-    id_like_rate = (
-        non_numeric.str.match(_UUID_RE).mean() if len(non_numeric) else 0.0
-    )
+    id_like_rate = non_numeric.str.match(_UUID_RE).mean() if len(non_numeric) else 0.0
 
     lowered = sample.str.lower()
     direction_rate = lowered.isin(DIRECTION_TOKENS).mean()

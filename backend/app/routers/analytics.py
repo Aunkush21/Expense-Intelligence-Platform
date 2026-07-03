@@ -9,6 +9,7 @@ portable SQLAlchemy constructs (`func`, `case`), so the same code runs on SQLite
 Convention: amount < 0 is spend, amount > 0 is income. Spend totals are reported
 as positive numbers for display.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -116,9 +117,7 @@ def monthly_trends(
     # we fetch just the two needed columns — not whole ORM rows — and bucket in
     # Python. This stays portable while still avoiding object hydration.
     rows = db.execute(
-        _for_account(
-            select(Transaction.txn_date, Transaction.amount), account_id
-        )
+        _for_account(select(Transaction.txn_date, Transaction.amount), account_id)
     ).all()
 
     spend: dict[str, float] = defaultdict(float)

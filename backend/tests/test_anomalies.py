@@ -1,4 +1,5 @@
 """Tests for anomaly detection (spend spikes + new merchants)."""
+
 from datetime import date, timedelta
 
 from app.models import Transaction
@@ -7,7 +8,15 @@ from app.services.anomalies import detect
 START = date(2026, 1, 1)
 
 
-def _txn(tid: int, merchant: str, day_offset: int, amount: float, *, category="Shopping", recurring=False):
+def _txn(
+    tid: int,
+    merchant: str,
+    day_offset: int,
+    amount: float,
+    *,
+    category="Shopping",
+    recurring=False,
+):
     t = Transaction(
         merchant=merchant,
         txn_date=START + timedelta(days=day_offset),
@@ -35,7 +44,9 @@ def test_flags_spend_spike_within_category():
 
 def test_flags_new_merchant_in_recent_window():
     # 80-day span of small, established spend...
-    txns = [_txn(i, "CORNER STORE", i * 8, -20.0, category="Groceries") for i in range(10)]
+    txns = [
+        _txn(i, "CORNER STORE", i * 8, -20.0, category="Groceries") for i in range(10)
+    ]
     # ...then a big first-time charge near the end.
     txns.append(_txn(99, "DELTA AIR LINES", 75, -450.0, category="Travel"))
     hits = detect(txns)
@@ -45,7 +56,9 @@ def test_flags_new_merchant_in_recent_window():
 
 
 def test_recurring_merchant_is_not_a_new_merchant():
-    txns = [_txn(i, "CORNER STORE", i * 8, -20.0, category="Groceries") for i in range(10)]
+    txns = [
+        _txn(i, "CORNER STORE", i * 8, -20.0, category="Groceries") for i in range(10)
+    ]
     txns.append(
         _txn(99, "NETFLIX", 75, -450.0, category="Subscriptions", recurring=True)
     )

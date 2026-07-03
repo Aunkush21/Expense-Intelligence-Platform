@@ -203,6 +203,44 @@ tbody tr:hover { background: var(--surface-2); }
 
 .cat-select { padding: 0.3rem 0.45rem; font-size: 0.8rem; border-radius: 8px; }
 
+/* Category column: header filter + clickable row labels */
+.th-filter { display: flex; align-items: center; gap: 0.5rem; }
+.cat-header-select {
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+  padding: 0.25rem 0.4rem;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+}
+
+.cat-label {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 0.28rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.cat-label:hover { background: var(--brand-soft); border-color: #dfe3fb; color: var(--brand); }
+
+.uncat-note {
+  background: var(--brand-soft);
+  border: 1px solid #dfe3fb;
+  border-radius: 11px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  color: var(--text);
+  margin-bottom: 1rem;
+}
+.uncat-note strong { color: var(--ink); }
+
 .scroll { max-height: 470px; overflow-y: auto; }
 
 /* ─────────────────────────── Alerts ─────────────────────────── */
@@ -328,13 +366,10 @@ tbody tr:hover { background: var(--surface-2); }
 }
 .sched-status strong { color: var(--ink); font-weight: 600; }
 
-.digest-body {
-  background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 12px; padding: 1rem 1.1rem;
-  font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 0.82rem; line-height: 1.6; color: var(--text);
-  white-space: pre-wrap; margin: 0; max-height: 50vh; overflow-y: auto;
+.digest-frame {
+  width: 100%;
+  height: 60vh;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f2f1ec;
 }
-
-/* ─────────────────── Subscriptions table accents ────────────── */
-.sub-cadence { text-transform: capitalize; }

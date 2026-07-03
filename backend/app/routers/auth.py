@@ -3,6 +3,7 @@
 Tokens are delivered as httpOnly cookies, never in the response body, so the
 browser's JavaScript never touches them.
 """
+
 from __future__ import annotations
 
 import time

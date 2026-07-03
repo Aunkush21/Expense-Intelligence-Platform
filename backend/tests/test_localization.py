@@ -1,5 +1,6 @@
 """Tests for the India-first localization: INR formatting, day-first dates,
 UPI merchant cleanup, and Indian merchant categorization."""
+
 import pandas as pd
 
 from app.services.categorization import categorize_by_rules
@@ -32,6 +33,14 @@ def test_upi_merchant_cleanup():
     assert clean_merchant_name("WHOLE FOODS MARKET #123") == "WHOLE FOODS MARKET #123"
 
 
+def test_bank_abbreviations_expand():
+    # Terse codes become readable words...
+    assert clean_merchant_name("WDL TFR") == "Withdrawal Transfer"
+    assert clean_merchant_name("DEP TFR") == "Deposit Transfer"
+    # ...but real merchant names with an abbreviation-like token are untouched.
+    assert clean_merchant_name("DR REDDY LABS") == "DR REDDY LABS"
+
+
 def test_indian_categorization():
     assert categorize_by_rules("SWIGGY") == "Dining"
     assert categorize_by_rules("BLINKIT") == "Groceries"
@@ -40,3 +49,14 @@ def test_indian_categorization():
     assert categorize_by_rules("CULTFIT") == "Health"
     # UPI narration with no recognizable merchant still reads as a transfer.
     assert categorize_by_rules("RAHUL", "UPI/RAHUL/rahul@oksbi/Payment") == "Transfers"
+
+
+def test_cash_withdrawal_beats_location_keyword():
+    # An ATM located at a university is a cash withdrawal, not a fee or tuition.
+    assert (
+        categorize_by_rules("ATM WDL ATM CASH 6121 SIKKIM MANIPAL UNIVERSIGANG")
+        == "Cash"
+    )
+    assert categorize_by_rules("SELF WDL") == "Cash"
+    # A genuine fee payment to the university is still Education.
+    assert categorize_by_rules("SIKKIM MANIPAL UNIVERSITY FEE PAYMENT") == "Education"

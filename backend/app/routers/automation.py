@@ -4,6 +4,7 @@ These endpoints let a user see/send the digest without waiting for the scheduled
 run. They build the digest the same way the scheduler does (directly from the DB),
 so the preview always matches what would be emailed.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -11,10 +12,15 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Account, User
+from app.scheduler import _data_uri, run_digest_for_account
 from app.schemas import DigestPreview, DigestSendResult, SchedulerStatus
-from app.scheduler import run_digest_for_account
 from app.security import get_current_user, get_owned_account
-from app.services.digest import build_digest, render_text
+from app.services.digest import (
+    build_digest,
+    generate_pie_png,
+    render_html,
+    render_text,
+)
 from app.services.mailer import MailerError
 
 router = APIRouter(prefix="/api", tags=["automation"])
@@ -28,9 +34,7 @@ def scheduler_status(
     scheduler = getattr(request.app.state, "scheduler", None)
     job = scheduler.get_job("weekly_digest") if scheduler else None
     next_run = (
-        job.next_run_time.isoformat()
-        if job and job.next_run_time is not None
-        else None
+        job.next_run_time.isoformat() if job and job.next_run_time is not None else None
     )
     return SchedulerStatus(
         running=bool(scheduler and scheduler.running),
@@ -46,7 +50,9 @@ def preview_digest(
 ) -> DigestPreview:
     digest = build_digest(db, account.id)
     subject, body = render_text(digest)  # type: ignore[arg-type]
-    return DigestPreview(account_id=account.id, subject=subject, body=body)
+    png = generate_pie_png(digest.all_categories) if digest.has_activity else None  # type: ignore[union-attr]
+    html = render_html(digest, _data_uri(png) if png else None)  # type: ignore[arg-type]
+    return DigestPreview(account_id=account.id, subject=subject, body=body, html=html)
 
 
 @router.post("/accounts/{account_id}/digest/send", response_model=DigestSendResult)

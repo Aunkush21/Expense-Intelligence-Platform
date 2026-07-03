@@ -11,6 +11,7 @@ positive = money in (income/refund). Three sign sources are handled, in order:
   2. an already-signed amount column,
   3. separate debit/credit columns.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -73,35 +74,94 @@ def _infer_dayfirst(series: pd.Series) -> bool:
             continue
         first_max = max(first_max, int(match.group(1)))
         second_max = max(second_max, int(match.group(2)))
+    # Explicit per-case branches read clearer here than a single negated boolean.
     if first_max == 0 and second_max == 0:
         return False  # no dd/mm-style dates (e.g. ISO YYYY-MM-DD) — parse natively
-    if second_max > 12 and first_max <= 12:
+    if second_max > 12 and first_max <= 12:  # noqa: SIM103
         return False  # mm/dd/yyyy
     return True  # dd/mm/yyyy, or ambiguous -> India default (day-first)
 
 
 # Bank-rail prefixes/tokens that aren't the actual merchant name.
 _TXN_NOISE = {
-    "UPI", "POS", "NEFT", "IMPS", "RTGS", "ACH", "ATM", "DR", "CR", "REF", "TXN",
-    "PAYMENT", "PAY", "PMT", "PYMT", "NA", "TO", "FROM", "VPA", "ECOM", "INB", "BIL",
+    "UPI",
+    "POS",
+    "NEFT",
+    "IMPS",
+    "RTGS",
+    "ACH",
+    "ATM",
+    "DR",
+    "CR",
+    "REF",
+    "TXN",
+    "PAYMENT",
+    "PAY",
+    "PMT",
+    "PYMT",
+    "NA",
+    "TO",
+    "FROM",
+    "VPA",
+    "ECOM",
+    "INB",
+    "BIL",
+}
+# Terse bank codes -> readable words, for statements that only give abbreviations
+# (e.g. "WDL TFR" -> "Withdrawal Transfer"). Only applied when the WHOLE detail is
+# codes/numbers, so real merchant names (e.g. "DR REDDY LABS") are never mangled.
+_ABBREV = {
+    "WDL": "Withdrawal",
+    "WDR": "Withdrawal",
+    "DEP": "Deposit",
+    "TFR": "Transfer",
+    "TRF": "Transfer",
+    "ATM": "ATM",
+    "CASH": "Cash",
+    "CHG": "Charge",
+    "CHGS": "Charges",
+    "INT": "Interest",
+    "NEFT": "NEFT",
+    "IMPS": "IMPS",
+    "RTGS": "RTGS",
+    "UPI": "UPI",
+    "POS": "POS",
+    "EMI": "EMI",
+    "SAL": "Salary",
+    "REV": "Reversal",
+    "PMT": "Payment",
+    "TXN": "Transaction",
+    "IB": "Internet Banking",
+    "MB": "Mobile Banking",
+    "ECS": "ECS",
+    "ACH": "ACH",
+    "CR": "Credit",
+    "DR": "Debit",
 }
 _MERCHANT_SPLIT = re.compile(r"[/\-\s|:*#]+")
 
 
 def clean_merchant_name(raw: str) -> str:
-    """Extract a clean merchant from UPI/POS/NEFT narrations.
+    """Turn a raw statement detail into something a person can read.
 
-    `UPI/SWIGGY/abc@ybl/...` -> `SWIGGY`. Plain merchant names (no bank rail) are
-    returned unchanged so we don't mangle normal statements.
+    - UPI/POS/NEFT rails -> pull out the merchant: `UPI/SWIGGY/abc@ybl` -> `SWIGGY`.
+    - Pure bank codes    -> expand: `WDL TFR` -> `Withdrawal Transfer`.
+    - Anything else       -> left unchanged, so real merchant names stay intact.
     """
     text = raw.strip()
     tokens = [t for t in _MERCHANT_SPLIT.split(text) if t]
-    upper = {t.upper() for t in tokens}
-    if not (upper & {"UPI", "POS", "NEFT", "IMPS", "RTGS", "ACH"}):
+    if not tokens:
         return text[:200]
-    for token in tokens:
-        if len(token) >= 3 and token.isalpha() and token.upper() not in _TXN_NOISE:
-            return token[:200]
+
+    upper = {t.upper() for t in tokens}
+    if upper & {"UPI", "POS", "NEFT", "IMPS", "RTGS", "ACH"}:
+        for token in tokens:
+            if len(token) >= 3 and token.isalpha() and token.upper() not in _TXN_NOISE:
+                return token[:200]
+
+    if all(t.upper() in _ABBREV or t.isdigit() for t in tokens):
+        return " ".join(_ABBREV.get(t.upper(), t) for t in tokens)[:200]
+
     return text[:200]
 
 
@@ -146,7 +206,7 @@ def parse_statement(file_bytes: bytes, account_id: int) -> ParseResult:
 
     rows: list[NormalizedRow] = []
     skipped = 0
-    for txn_dt, raw_merchant, amount in zip(dates, merchants, amounts):
+    for txn_dt, raw_merchant, amount in zip(dates, merchants, amounts, strict=False):
         if (
             pd.isna(txn_dt)
             or pd.isna(amount)
@@ -194,7 +254,9 @@ def _clean_series(df: pd.DataFrame, col: str) -> pd.Series:
     return pd.to_numeric(df[col].map(lambda v: clean_number(str(v))), errors="coerce")
 
 
-def _resolve_amounts(df: pd.DataFrame, mapping: dict[str, str]) -> tuple[pd.Series, bool]:
+def _resolve_amounts(
+    df: pd.DataFrame, mapping: dict[str, str]
+) -> tuple[pd.Series, bool]:
     """Resolve a signed amount for the whole frame at once.
 
     Returns the amount Series plus a flag indicating no sign information was found

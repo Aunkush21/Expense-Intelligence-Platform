@@ -1,4 +1,5 @@
 """Tests for recurring-subscription detection."""
+
 from datetime import date, timedelta
 
 from app.models import Transaction

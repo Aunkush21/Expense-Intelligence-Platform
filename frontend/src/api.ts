@@ -214,7 +214,7 @@ export const api = {
 
   digestPreview: (accountId: number) =>
     authedFetch(`/api/accounts/${accountId}/digest/preview`).then(
-      json<{ account_id: number; subject: string; body: string }>,
+      json<{ account_id: number; subject: string; body: string; html: string }>,
     ),
 
   sendDigest: (accountId: number) =>

@@ -12,11 +12,12 @@ transaction history:
 This is a derived view, so each run fully recomputes and replaces the account's
 subscriptions table (idempotent — safe to call after every upload).
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, timedelta
 from dataclasses import dataclass
+from datetime import date, timedelta
 from statistics import median
 
 from sqlalchemy import delete, select, update
@@ -83,7 +84,7 @@ def detect(transactions: list[Transaction]) -> list[DetectedSubscription]:
             continue
         txns.sort(key=lambda t: t.txn_date)
         dates = [t.txn_date for t in txns]
-        gaps = [(b - a).days for a, b in zip(dates, dates[1:])]
+        gaps = [(b - a).days for a, b in zip(dates, dates[1:], strict=False)]
         if not gaps:
             continue
 

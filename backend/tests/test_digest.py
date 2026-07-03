@@ -1,4 +1,5 @@
 """Tests for digest rendering (DB-free — exercises the text composition)."""
+
 from datetime import date
 
 from app.services.digest import CategoryLine, Digest, render_text

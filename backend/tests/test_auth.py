@@ -1,4 +1,5 @@
 """Auth tests: crypto units + cookie-based session / isolation via TestClient."""
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -59,9 +60,7 @@ def app_db():
 
 def _register(client, email, password="password123"):
     # TestClient persists the auth cookies the server sets, like a browser.
-    res = client.post(
-        "/api/auth/register", json={"email": email, "password": password}
-    )
+    res = client.post("/api/auth/register", json={"email": email, "password": password})
     assert res.status_code == 201, res.text
     assert "access_token" not in res.text  # token must never be in the body
     return res
@@ -84,8 +83,7 @@ def test_register_login_and_isolation(app_db):
     _register(client_b, "b@example.com")
     assert client_b.get("/api/accounts").json() == []
     assert (
-        client_b.get(f"/api/accounts/{account_id}/analytics/summary").status_code
-        == 404
+        client_b.get(f"/api/accounts/{account_id}/analytics/summary").status_code == 404
     )
 
 

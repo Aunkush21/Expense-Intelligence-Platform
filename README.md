@@ -25,12 +25,17 @@ all behind multi-user authentication.
   cadence for a stable amount, and predicts the next charge date.
 - **Anomaly flagging** — per-category spend spikes (IQR outliers) and notable
   first-time merchants, tuned for precision.
-- **Weekly email digest** — a background scheduler independently emails a summary
-  (spend vs. prior week, top categories, upcoming subscriptions, anomalies).
+- **Weekly email digest** — a background scheduler independently emails a polished
+  HTML summary with a **spend-by-category pie chart** and **personalized saving
+  tips** (where you overspent vs. last week, upcoming subscriptions, anomalies).
 - **Authentication** — multi-user with bcrypt-hashed passwords, short-lived JWT
   access tokens + rotating refresh tokens, all delivered as **httpOnly cookies**.
-- **Analytics dashboard** — summary cards, spend-by-category, monthly trends,
-  subscriptions, alerts, and an editable transactions table (React + Recharts).
+- **India-first** — ₹ formatting with lakh/crore grouping, Indian-bank CSV parsing
+  (split debit/credit, DD/MM dates, UPI-narration cleanup), and Indian merchant
+  rules (Swiggy, Zepto, Jio, UPI/NEFT, ATM cash, university fees…).
+- **Analytics dashboard** — a cash-flow summary, spend-by-category, monthly trends,
+  subscriptions, alerts, and a transactions table with inline category correction
+  (React + Recharts).
 
 ## Architecture
 
@@ -66,7 +71,8 @@ two independent consumers** — the analytics API and the scheduler — that sha
 | Backend  | FastAPI, SQLAlchemy 2.0, Pydantic v2                               |
 | Auth     | JWT (PyJWT) + bcrypt, httpOnly cookies, rotating refresh tokens    |
 | ML / ETL | scikit-learn (TF-IDF + Naive Bayes), pandas                       |
-| Scheduler| APScheduler                                                       |
+| Scheduler| APScheduler · digest charts with matplotlib                       |
+| Tooling  | ruff (lint + format), pytest                                      |
 | Database | SQLite for local dev · **PostgreSQL** as the production target     |
 | Frontend | React + TypeScript (Vite), Recharts                               |
 
@@ -104,8 +110,9 @@ npm install
 npm run dev                     # http://localhost:5173 (proxies /api to the backend)
 ```
 
-Open `http://localhost:5173`, create an account, then **Upload statement** — try
-`backend/sample_data/sample_statement.csv` (or the real `anz.csv`).
+Open `http://localhost:5173`, sign up, then **Upload statement** — try
+`backend/sample_data/sample_statement_india.csv` (an HDFC-style ₹ statement), or
+`anz.csv` to see the column inference handle a completely different format.
 
 ### 3. Email digest (optional)
 
@@ -114,11 +121,15 @@ fully demoable. To send real email, set the `SMTP_*` vars in `.env` (Mailtrap is
 a great no-risk test inbox). Set `DIGEST_INTERVAL_MINUTES=2` to watch the
 scheduler fire on a short loop.
 
-## Tests
+## Tests & code quality
 
 ```bash
-cd backend && pytest -q        # 23 tests: ETL, categorization, subscriptions,
-                               # anomalies, digest rendering, and auth/isolation
+cd backend
+pip install -r requirements-dev.txt
+pytest -q          # 29 tests: ETL, categorization, subscriptions, anomalies,
+                   # digest rendering, localization, and auth/isolation
+ruff check .       # lint (config in pyproject.toml)
+ruff format .      # format
 ```
 
 ## API overview
@@ -150,10 +161,11 @@ backend/
   app/
     routers/     auth · ingestion · analytics · automation
     services/    schema_inference · etl · categorization · pipeline
-                 subscriptions · anomalies · digest · mailer
+                 subscriptions · anomalies · digest · mailer · formatting
     models.py · schemas.py · security.py · scheduler.py · database.py · config.py
-  tests/         pytest suite
-  sample_data/   sample_statement.csv · anz.csv
+  tests/         pytest suite (7 modules)
+  sample_data/   sample_statement_india.csv · anz.csv
+  pyproject.toml requirements.txt · requirements-dev.txt
 frontend/
   src/           App.tsx · AuthScreen.tsx · api.ts (+ css)
 ```
