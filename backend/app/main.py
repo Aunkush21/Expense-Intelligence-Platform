@@ -57,9 +57,12 @@ async def lifespan(app: FastAPI):
         if settings.digest_interval_minutes > 0
         else "weekly (Mon 08:00)"
     )
-    app.state.digest_delivery_mode = (
-        "email (SMTP)" if settings.smtp_configured else "file (digest_outbox/)"
-    )
+    if settings.brevo_api_key:
+        app.state.digest_delivery_mode = "email (Brevo API)"
+    elif settings.smtp_configured:
+        app.state.digest_delivery_mode = "email (SMTP)"
+    else:
+        app.state.digest_delivery_mode = "file (digest_outbox/)"
     try:
         yield
     finally:

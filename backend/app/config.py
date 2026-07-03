@@ -24,7 +24,12 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
+    # Brevo HTTP API key (starts with "xkeysib-"). Preferred in production: many
+    # hosts (Render, etc.) block outbound SMTP ports, but HTTPS (443) is always
+    # open. When set, email is sent via the API instead of SMTP.
+    brevo_api_key: str = ""
     digest_from: str = "digest@expense-intelligence.local"
+    digest_from_name: str = "Expense Intelligence"
     digest_to: str = ""  # falls back to digest_from when empty
     digest_outbox: str = "./digest_outbox"
     # Scheduler cadence. By default the digest runs weekly (Monday 08:00). Set a

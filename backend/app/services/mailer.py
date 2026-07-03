@@ -1,15 +1,20 @@
-"""Email delivery with a no-credentials fallback.
+"""Email delivery with graceful fallbacks.
 
-If SMTP is configured (smtp_host/user/password), digests are sent for real. If
-not — the default for local dev and this demo — the rendered email is written to
-the digest_outbox/ directory and logged, so the whole pipeline is observable
-without any mail account.
+Delivery backend is chosen in this order:
+  1. Brevo HTTP API (if BREVO_API_KEY is set) — preferred in production, since
+     many hosts (Render, etc.) block outbound SMTP but never HTTPS.
+  2. SMTP (if smtp_host/user/password are set) — used for local dev.
+  3. digest_outbox/ file — no credentials needed; the pipeline stays observable.
 """
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import smtplib
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -17,6 +22,8 @@ from app.config import get_settings
 
 logger = logging.getLogger("digest.mailer")
 settings = get_settings()
+
+_BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 class MailerError(Exception):
@@ -42,9 +49,67 @@ def send_email(
     """
     recipient = to or settings.digest_to or settings.digest_from
 
+    if settings.brevo_api_key:
+        return _send_brevo_api(subject, body, recipient, html, inline_images)
     if settings.smtp_configured:
         return _send_smtp(subject, body, recipient, html, inline_images)
     return _write_to_outbox(subject, body, recipient, html)
+
+
+def _send_brevo_api(
+    subject: str,
+    body: str,
+    recipient: str,
+    html: str | None,
+    inline_images: dict[str, bytes] | None,
+) -> str:
+    """Send via Brevo's transactional API over HTTPS (works where SMTP is blocked).
+
+    Brevo's JSON API has no cid/inline-image support, so any `cid:<key>` reference
+    in the HTML is rewritten to an embedded data-URI before sending.
+    """
+    html_content = html or f"<pre>{body}</pre>"
+    for cid, data in (inline_images or {}).items():
+        data_uri = "data:image/png;base64," + base64.b64encode(data).decode()
+        html_content = html_content.replace(f"cid:{cid}", data_uri)
+
+    payload = json.dumps(
+        {
+            "sender": {
+                "email": settings.digest_from,
+                "name": settings.digest_from_name,
+            },
+            "to": [{"email": recipient}],
+            "subject": subject,
+            "htmlContent": html_content,
+            "textContent": body,
+        }
+    ).encode()
+
+    request = urllib.request.Request(
+        _BREVO_API_URL,
+        data=payload,
+        headers={
+            "api-key": settings.brevo_api_key,
+            "content-type": "application/json",
+            "accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")[:300]
+        raise MailerError(
+            f"Brevo API rejected the email ({exc.code}). Make sure the sender "
+            f"'{settings.digest_from}' is a verified sender in Brevo. {detail}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise MailerError(f"Could not reach the Brevo API: {exc.reason}") from exc
+
+    logger.info("Digest emailed to %s via Brevo API", recipient)
+    return f"emailed to {recipient}"
 
 
 def _send_smtp(
