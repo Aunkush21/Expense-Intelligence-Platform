@@ -38,7 +38,6 @@ build/
 backend/sample_data/creditcard.csv
 
 # ─────────────────────────── Tooling / IDE ──────────────────────────
-.claude/
 .idea/
 .vscode/
 *.swp
