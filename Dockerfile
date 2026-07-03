@@ -5,10 +5,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: build the React/Vite frontend ──────────────────────────────────
-FROM node:20-slim AS frontend
+# Node 22 (Vite 8's supported engine). We use `npm install`, not `npm ci`, on
+# purpose: Vite/Rolldown pull in platform-specific native binaries as optional
+# deps, so a lockfile resolved on one OS (e.g. Windows) won't satisfy `npm ci`
+# on Linux. `npm install` resolves the correct Linux binaries at build time.
+FROM node:22-slim AS frontend
 WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm install --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build          # emits /build/dist
 
