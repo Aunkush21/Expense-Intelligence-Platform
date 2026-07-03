@@ -1,0 +1,36 @@
+# Render Blueprint — deploys the whole app as one Docker web service.
+# In Render: New → Blueprint → pick this repo. It reads this file, then prompts
+# for the secrets marked `sync: false`. See DEPLOYMENT.md for the click-by-click.
+services:
+  - type: web
+    name: expense-intelligence
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # Neon Postgres connection string — paste in the Render dashboard.
+      - key: DATABASE_URL
+        sync: false
+      # Strong signing secret — Render generates one for you.
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      # HTTPS + same-origin cookies in production.
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: lax
+      # Weekly digest email via Brevo. Secrets (SMTP_USER/PASSWORD) are entered
+      # in the dashboard, never committed.
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: DIGEST_FROM
+        value: expenseintelligence@gmail.com
+      - key: DIGEST_TO
+        value: expenseintelligence@gmail.com

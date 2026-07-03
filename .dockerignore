@@ -1,0 +1,23 @@
+# Keep the build context small and secrets out of the image.
+**/.venv
+**/venv
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+**/.ruff_cache
+**/.pytest_cache
+**/.mypy_cache
+
+# Secrets never go into the image — set them as env vars on the host instead.
+**/.env
+!**/.env.example
+
+# Local data / build artifacts (rebuilt inside the image).
+**/*.db
+**/*.sqlite*
+frontend/dist
+backend/uploads
+backend/digest_outbox
+
+.git
+*.pdf

@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from app.config import get_settings
@@ -88,3 +91,26 @@ app.include_router(automation.router)
 @app.get("/health", tags=["meta"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# ── Serve the built React app (single-origin production) ──────────────────────
+# When STATIC_DIR points at frontend/dist, the API also serves the SPA: hashed
+# assets are served directly, and any other path falls back to index.html so
+# client-side routing works. Registered last, so /api and /health win first.
+_static_dir = Path(settings.static_dir) if settings.static_dir else None
+if _static_dir and _static_dir.is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=_static_dir / "assets"),
+        name="assets",
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str) -> FileResponse:
+        # Never let the SPA fallback swallow unmatched API/health requests.
+        if full_path.startswith("api/") or full_path == "health":
+            raise HTTPException(status_code=404)
+        candidate = _static_dir / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_static_dir / "index.html")

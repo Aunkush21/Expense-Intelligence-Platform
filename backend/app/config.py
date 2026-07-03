@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./expense_intelligence.db"
     upload_dir: str = "./uploads"
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    # Path to the built React app (frontend/dist). When set, the API also serves
+    # the SPA from the same origin — no CORS/cookie cross-site issues in prod.
+    static_dir: str = ""
 
     # --- Weekly digest / email ---
     # If SMTP isn't configured, digests are written to digest_outbox/ instead of
